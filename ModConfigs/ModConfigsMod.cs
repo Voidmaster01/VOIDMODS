@@ -34,5 +34,11 @@ namespace ModConfigs
         {
             LoggerInstance.Msg("MOD CONFIGS is ready. Mods can add pages with ConfigHub.Register.");
         }
+
+        // Every frame: lets MenuRow finish tidying the menu once Unity has laid it out (see MenuRow.Tick).
+        public override void OnUpdate()
+        {
+            MenuRow.Tick();
+        }
     }
 }

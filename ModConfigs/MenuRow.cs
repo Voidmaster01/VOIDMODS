@@ -14,6 +14,9 @@
 //   If the rows sit in a Unity "layout group" (a component that stacks children automatically), the copy is just
 //   inserted above QUIT and the layout group moves everything. If not, the copy takes QUIT's place and QUIT moves
 //   down by one row distance. The first time, the menu's structure is written to the log, to help fix placement.
+//   In FNAF Online 0.9.7 the rows sit in "Buttons" (a VerticalLayoutGroup) inside the purple frame "Inputs",
+//   which has a fixed size. One more row would stick out below the frame, so the "USERNAME" title is hidden and
+//   everything below it inside the frame moves up by the space it took (MakeRoom).
 
 using System;
 using System.Collections.Generic;
@@ -100,7 +103,164 @@ namespace ModConfigs
             row.transform.SetSiblingIndex(index); // QUIT moves one place down in the list
             if (list.GetComponent(Il2CppType.Of<LayoutGroup>()) == null)
                 PlaceByHand(quitRow, row, list, index);
+            MakeRoom(list.parent, list);
             MelonLogger.Msg("[ModConfigs] MOD CONFIGS row added to the home screen.");
+        }
+
+        // Hides the "USERNAME" title inside the menu frame and moves the frame's other contents up by the space the
+        // title used (from the title's top edge to the top edge of the next thing below it), so the extra row fits
+        // inside the frame again. GetWorldCorners gives an element's 4 corners on screen (index 1 = top-left);
+        // dividing by lossyScale turns screen distances back into the frame's own units.
+        private static void MakeRoom(Transform frame, Transform list)
+        {
+            if (frame == null)
+                return;
+            // Unity lays the menu out a little after it starts, so measuring right now could give wrong numbers.
+            // Remember what to do; Tick (called every frame by ModConfigsMod) does it two frames later.
+            pendingFrame = frame;
+            pendingList = list;
+            pendingAt = Time.frameCount + 2;
+        }
+
+        private static Transform pendingFrame, pendingList;
+        private static int pendingAt;
+
+        // Called every frame. Runs the waiting MakeRoom once its frame has come.
+        public static void Tick()
+        {
+            if (pendingFrame == null || Time.frameCount < pendingAt)
+                return;
+            Transform frame = pendingFrame, list = pendingList;
+            pendingFrame = pendingList = null;
+            try
+            {
+                Canvas.ForceUpdateCanvases(); // make Unity finish any layout work right now
+                DoMakeRoom(frame, list);
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Warning("[ModConfigs] Could not make room in the menu: " + e.Message);
+            }
+        }
+
+        // The real work. In FNAF Online 0.9.7 the "Username" title is a text INSIDE the name box element ("Player Name
+        // Input Field"), sitting above the box. It is hidden, and ONLY the name box and the list of rows move up, by the
+        // distance from the title's top edge to the name box's top edge. The frame's background pieces ("Image",
+        // "Vignette") stay put: the dark "Image" is drawn over the frame's border, so moving it would cover the top line.
+        private static void DoMakeRoom(Transform frame, Transform list)
+        {
+            LogFrame(frame);
+            TMP_Text title = FindTitle(frame, list);
+            if (title == null || !title.gameObject.activeSelf)
+            {
+                MelonLogger.Warning("[ModConfigs] Couldn't find the USERNAME title to make room (see the frame list above).");
+                return;
+            }
+            // The frame's direct child that contains the title (the name box element).
+            Transform holder = title.transform;
+            while (holder.parent != null && holder.parent != frame)
+                holder = holder.parent;
+
+            float titleTop = Top(title.transform);
+            float boxTop = Top(holder);
+            if (holder == title.transform || boxTop >= titleTop - 0.5f)
+            {
+                // The title is not above its holder's box; then measure to the highest other part below the title.
+                boxTop = float.MinValue;
+                for (int i = 0; i < frame.childCount; i++)
+                {
+                    Transform child = frame.GetChild(i);
+                    float top = Top(child);
+                    if (child != holder && child.gameObject.activeSelf && top < titleTop - 0.5f && top > boxTop)
+                        boxTop = top;
+                }
+                if (boxTop == float.MinValue)
+                    return;
+            }
+            float shift = (titleTop - boxTop) / Math.Max(0.0001f, frame.lossyScale.y);
+
+            title.gameObject.SetActive(false);
+            foreach (Transform part in new[] { holder, list })
+            {
+                RectTransform rt = part.TryCast<RectTransform>();
+                if (rt != null)
+                    rt.anchoredPosition += new Vector2(0, shift);
+            }
+            MelonLogger.Msg($"[ModConfigs] Hid the USERNAME title and moved the menu up {shift:0} units to fit MOD CONFIGS.");
+        }
+
+        // Finds the title text: a text in the frame (not in the list of rows) that contains "USER" (the game writes
+        // "Username" and shows it in capitals), and that is not the name box's own typed text or its
+        // "Enter Your Name..." placeholder.
+        private static TMP_Text FindTitle(Transform frame, Transform list)
+        {
+            var skip = new HashSet<IntPtr>(); // the input fields' own texts, by their memory address
+            foreach (Component c in frame.GetComponentsInChildren(Il2CppType.Of<TMP_InputField>(), true))
+            {
+                TMP_InputField field = c.TryCast<TMP_InputField>();
+                if (field == null)
+                    continue;
+                if (field.textComponent != null)
+                    skip.Add(field.textComponent.Pointer);
+                if (field.placeholder != null)
+                    skip.Add(field.placeholder.Pointer);
+            }
+            foreach (Component c in frame.GetComponentsInChildren(Il2CppType.Of<TMP_Text>(), true))
+            {
+                TMP_Text t = c.TryCast<TMP_Text>();
+                if (t == null || t.text == null || skip.Contains(t.Pointer) || t.transform.IsChildOf(list))
+                    continue;
+                if (t.text.ToUpperInvariant().Contains("USER"))
+                    return t;
+            }
+            return null;
+        }
+
+        // All texts inside an element, joined (empty if none).
+        private static string TextOf(Transform t)
+        {
+            var sb = new StringBuilder();
+            foreach (Component c in t.GetComponentsInChildren(Il2CppType.Of<TMP_Text>(), true))
+            {
+                TMP_Text tt = c.TryCast<TMP_Text>();
+                if (tt != null && tt.text != null)
+                    sb.Append(tt.text).Append(' ');
+            }
+            return sb.ToString().Trim();
+        }
+
+        // Writes the frame's direct children to the log: name, height, top edge and texts. If the title can't be
+        // found in some future game version, this line shows why.
+        private static void LogFrame(Transform frame)
+        {
+            var sb = new StringBuilder("[ModConfigs] Menu frame '" + frame.name + "' children:");
+            for (int i = 0; i < frame.childCount; i++)
+            {
+                Transform child = frame.GetChild(i);
+                RectTransform rt = child.TryCast<RectTransform>();
+                string text = TextOf(child);
+                if (text.Length > 40)
+                    text = text.Substring(0, 40) + "...";
+                sb.Append("\n  ").Append(i).Append(": ").Append(child.name)
+                  .Append(child.gameObject.activeSelf ? "" : " (hidden)")
+                  .Append(" height=").Append(rt != null ? rt.rect.height.ToString("0") : "?")
+                  .Append(" top=").Append(Top(child).ToString("0"))
+                  .Append(" text='").Append(text).Append('\'');
+            }
+            MelonLogger.Msg(sb.ToString());
+        }
+
+        // The top edge of a UI element on screen (y of its top-left corner).
+        // The array must be the game-side type (Il2CppStructArray): a plain C# Vector3[] would be COPIED into a
+        // temporary game array, Unity would fill that copy, and our array would stay all zeros.
+        private static float Top(Transform t)
+        {
+            RectTransform rt = t.TryCast<RectTransform>();
+            if (rt == null)
+                return t.position.y;
+            var corners = new Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppStructArray<Vector3>(4);
+            rt.GetWorldCorners(corners);
+            return corners[1].y;
         }
 
         // Removes every component that is not pure looks (see KeepTypes). DestroyImmediate removes it right now,
