@@ -17,7 +17,7 @@ It finds the game by itself and backs up anything it replaces.
 ## ℹ️ Good to know
 • Icons travel through the lobby **host**, so the host and everyone who wants to see icons need Voidcons
 • Backers keep their backer icon unless *they* switch it in MOD CONFIGS → Voidcons
-• Player IDs are never shared
+• Voidcons adds no privacy risk: it never sends, logs or saves player IDs (the game itself already shares them in its player list)
 
 🔗 **Releases:** <https://github.com/Voidmaster01/VOIDMODS/releases>
 💬 **Help, bugs, ideas, show your icon:** <https://github.com/Voidmaster01/VOIDMODS/discussions>

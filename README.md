@@ -30,7 +30,8 @@ To update, replace the `.dll` files with the ones from the newest release.
 `VOIDMODS-backup\<n>\` in the game folder, and installs the mods. Close the game first.
 
 Voidcons notes: icons travel only when the lobby's host has Voidcons too, and only players with Voidcons see them.
-Player IDs are never sent, logged or stored in readable form.
+Voidcons never sends, logs or stores player IDs in readable form. (The game itself already shares every player's
+ID with the lobby in its own player list; Voidcons adds nothing to that.)
 
 ## Building (modders)
 
