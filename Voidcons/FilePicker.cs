@@ -125,7 +125,9 @@ namespace Voidcons
                 ofn.lStructSize = Marshal.SizeOf(typeof(OpenFileName));
                 ofn.hwndOwner = owner;
                 // The filter list: pairs of "label" and "patterns", each ending with \0, and an extra \0 at the end.
-                ofn.lpstrFilter = "Pictures (PNG, JPG, BMP, GIF)\0*.png;*.jpg;*.jpeg;*.bmp;*.gif\0All files\0*.*\0\0";
+                ofn.lpstrFilter = "Pictures (PNG, JPG, WebP, GIF, BMP, HEIC, AVIF...)\0" +
+                    "*.png;*.jpg;*.jpeg;*.jfif;*.webp;*.gif;*.bmp;*.tif;*.tiff;*.ico;*.heic;*.heif;*.avif;*.jxr;*.wdp\0" +
+                    "All files\0*.*\0\0";
                 ofn.lpstrFile = buffer;
                 ofn.nMaxFile = maxChars;
                 ofn.lpstrTitle = "Voidcons - choose your player icon";

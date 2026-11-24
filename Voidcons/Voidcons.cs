@@ -11,7 +11,7 @@
 // HOW TO BUILD AND RUN
 //   Build: from the repo folder, pwsh -NoProfile -File build.ps1 -Mod Voidcons (after ModConfigs; build-all.ps1 does both).
 //   Use:   everything is done in the game: home screen -> MOD CONFIGS -> Voidcons. There you choose a picture
-//          (any PNG/JPG/BMP/GIF), move and crop it, and Voidcons compresses it to a 64 x 64 PNG. You can also
+//          (PNG, JPG, WebP, GIF, BMP, HEIC, AVIF...), move and crop it, and Voidcons makes it a round 256 x 256 PNG. You can also
 //          remove it, choose whether a backer icon is replaced (BackerOverride, off by default), forget
 //          remembered backers, and reload.
 //   Needs the ModConfigs mod (the MOD CONFIGS hub). MelonLoader says so if it's missing.
@@ -176,8 +176,8 @@ namespace Voidcons
             File.WriteAllText(file,
                 "Voidcons - your own player icon\r\n\r\n" +
                 "Everything is done inside the game: home screen -> MOD CONFIGS -> Voidcons.\r\n" +
-                "There you can choose a picture (PNG, JPG, BMP or GIF, any size), move and crop it\r\n" +
-                "(Voidcons compresses it to 64 x 64), remove it, choose whether a backer icon is replaced,\r\n" +
+                "There you can choose a picture (PNG, JPG, WebP, GIF, BMP, HEIC, AVIF..., any size), move and\r\n" +
+                "crop it (Voidcons makes it a round 256 x 256 icon), remove it, choose whether a backer icon is replaced,\r\n" +
                 "forget remembered backers, and reload Voidcons.\r\n\r\n" +
                 "Other players see your icon on the character select screen when they have Voidcons too,\r\n" +
                 "and the lobby's host has Voidcons.\r\n\r\n" +

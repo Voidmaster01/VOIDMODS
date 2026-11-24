@@ -11,7 +11,8 @@
 //
 // HOW IT WORKS (three steps)
 //   1. LoadPicture: GDI+ opens the file and hands us its pixels. GDI+ already knows JPG, GIF, BMP and more,
-//      so we don't have to write a decoder for each format.
+//      so we don't have to write a decoder for each format. Files GDI+ can't read (WebP, HEIC, AVIF...) go to
+//      WicReader.cs, which uses Windows' newer image system.
 //   2. Resample: takes any rectangle of the picture (it may stick out past the edges; that part becomes
 //      transparent) and shrinks or grows it by AVERAGING: every new pixel is the average of all old pixels it
 //      covers. That keeps it smooth instead of jagged. Colors are weighted by their transparency ("premultiplied
@@ -95,7 +96,18 @@ namespace Voidcons
 
         // Reads a picture file into RGBA bytes (top row first). The nested try/finally blocks make sure every
         // GDI+ object is given back in reverse order, even when something fails halfway.
+        // Reads a picture: GDI+ first (it handles the classic formats), and WIC for everything GDI+ can't read.
         public static byte[] LoadPicture(string path, out int width, out int height, out string error)
+        {
+            byte[] rgba = LoadWithGdiPlus(path, out width, out height, out error);
+            if (rgba != null || error != NotAPicture)
+                return rgba; // done, or a problem WIC can't fix either (missing file, too big...)
+            return WicReader.Load(path, MaxInputSide, out width, out height, out error);
+        }
+
+        private const string NotAPicture = "this file is not a picture Windows can read";
+
+        private static byte[] LoadWithGdiPlus(string path, out int width, out int height, out string error)
         {
             width = height = 0;
             error = null;
@@ -121,7 +133,7 @@ namespace Voidcons
             {
                 if (GdipCreateBitmapFromFile(path, out IntPtr bitmap) != 0)
                 {
-                    error = "this file is not a picture Windows can read";
+                    error = NotAPicture; // LoadPicture then tries WIC
                     return null;
                 }
                 try
