@@ -25,6 +25,10 @@ Download from the **[Releases](../../releases)** page. Every mod is its own `.dl
 
 To update, replace the `.dll` files with the ones from the newest release.
 
+**Or the one-click way:** download `VOIDMODS-patch-<n>.bat` and double-click it. It finds FNAF Online on your PC
+(or asks you to pick the folder), checks MelonLoader is installed, backs up any mod file it replaces into
+`VOIDMODS-backup\<n>\` in the game folder, and installs the mods. Close the game first.
+
 Voidcons notes: icons travel only when the lobby's host has Voidcons too, and only players with Voidcons see them.
 Player IDs are never sent, logged or stored in readable form.
 
@@ -63,7 +67,8 @@ No code at all? Settings made with `MelonPreferences` show up automatically.
 ModConfigs/   the MOD CONFIGS hub (ConfigHub API, UiKit look, PngReader, menu row, panel)
 Voidcons/     player icons (networking, move-and-crop page, image compression, file picker)
 branding/     the VOIDMODS logo (.png embedded into ModConfigs, .ico for Windows)
-tools/        helper scripts: make-release.ps1 (release files for GitHub), make-ico.ps1
+tools/        helper scripts: make-release.ps1 (release files for GitHub), make-patch.ps1 + patch_core.ps1
+              (one-click installer .bat), make-ico.ps1
 build.ps1     builds one mod;  build-all.ps1 builds all of them
 ```
 
