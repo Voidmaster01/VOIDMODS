@@ -1,0 +1,19 @@
+# Never upload compiled files or anything from the game itself (Brian's files are not ours to share).
+*.dll
+*.pdb
+*.exe
+MelonLoader/
+Il2CppAssemblies/
+UserData/
+
+# Your own game folder path (each person sets their own).
+game-path.txt
+
+# Windows extras (desktop.ini is kept so the repo folder shows the VOIDMODS icon; Thumbs.db is a cache).
+Thumbs.db
+
+# Editor leftovers
+*.before-*
+*.bak
+.vs/
+.vscode/
