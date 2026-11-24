@@ -60,4 +60,10 @@ tools/        helper scripts (make-ico.ps1)
 build.ps1     builds one mod;  build-all.ps1 builds all of them
 ```
 
+## License
+
+The code is under the [MIT License](LICENSE): use it, learn from it, build on it, just keep the copyright notice.
+**The VOIDMODS "V" logo is excluded**: it ships unchanged with ModConfigs and official VOIDMODS only, and may not
+be edited or used for other mods. Third-party mods using ConfigHub should leave `voidMod` set to `false`.
+
 Not affiliated with Brian_mpz. Game files are not included and must not be added to this repo.

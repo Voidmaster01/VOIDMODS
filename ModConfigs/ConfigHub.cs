@@ -42,7 +42,8 @@ namespace ModConfigs
         internal static readonly List<Entry> Entries = new List<Entry>();
 
         // Adds a page. name = what the list shows; version = shown under it; build = the method that fills the page.
-        // voidMod = true marks one of Voidmaster01's VOIDMODS (logo next to it). prefsCategory = the identifier of a
+        // voidMod = true marks one of Voidmaster01's official VOIDMODS (logo next to it). The logo is not under the
+        // MIT license (see LICENSE), so other mods leave this false. prefsCategory = the identifier of a
         // MelonPreferences category this page already shows, so it doesn't appear a second time as an automatic page.
         public static void Register(string name, string version, Action<ConfigPage> build, bool voidMod = false, string prefsCategory = null)
         {
