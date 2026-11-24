@@ -3,7 +3,6 @@
 # VOIDMODS
 
 Mods for **FNAF Online Multiplayer** by Brian_mpz, made by Voidmaster01, for [MelonLoader](https://melonwiki.xyz) 0.7.
-Every file is commented for beginners, so you can learn from them.
 
 | Mod | What it does |
 |---|---|
