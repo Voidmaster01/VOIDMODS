@@ -4,13 +4,13 @@
   HOW TO RUN (PowerShell 7, from the repo folder):   pwsh -NoProfile -File tools\make-social-preview.ps1
   WHAT IT NEEDS: PowerShell 7 on Windows (System.Drawing, Windows' drawing library) and branding\voidmod.png.
   WHAT IT MAKES: branding\social-preview.png. Upload it on github.com: repo Settings -> General -> Social preview.
-  To list new mods on the banner, add them to $mods below and run it again.
+  It names no single mod on purpose, so it stays right when new VOIDMODS are added.
 
   HOW IT DRAWS (like painting layers from back to front):
     1. background: near-black purple, with a soft purple glow behind the logo (a "path gradient": a color that
        fades out from a center point), and a frame like the game's menu box
     2. the V logo on the left, scaled up with high-quality smoothing
-    3. "VOIDMODS", the subtitle, and one menu-style row per mod (dark box, border, purple ">")
+    3. "VOIDMODS", the subtitle, a thin purple line, and a small credit line
     GitHub crops nothing, but shows the banner small in link previews, so everything important stays big and
     at least 40 pixels away from the edges.
 #>
@@ -19,15 +19,8 @@ Add-Type -AssemblyName System.Drawing
 $repo = Split-Path -Parent $PSScriptRoot
 $W = 1280; $H = 640
 
-# The mods shown as rows: name and a few words about it.
-$mods = @(
-    @{ Name = 'MOD CONFIGS'; About = 'in-game settings hub' },
-    @{ Name = 'VOIDCONS';    About = 'your own HD player icon' }
-)
-
 # Colors (the same purples as UiKit.cs in ModConfigs). FromArgb(alpha, red, green, blue), each 0-255.
 $bgColor     = [System.Drawing.Color]::FromArgb(255, 9, 5, 15)
-$rowColor    = [System.Drawing.Color]::FromArgb(255, 15, 9, 26)
 $borderColor = [System.Drawing.Color]::FromArgb(255, 43, 28, 69)
 $purple      = [System.Drawing.Color]::FromArgb(255, 156, 92, 230)
 $white       = [System.Drawing.Color]::FromArgb(255, 242, 242, 247)
@@ -63,27 +56,16 @@ $lw = [int]($logo.Width * $scale); $lh = [int]($logo.Height * $scale)
 $g.DrawImage($logo, 90, [int](($H - $lh) / 2), $lw, $lh)
 $logo.Dispose()
 
-# 3. Text and rows, in a column starting at x = 470.
+# 3. Text, in a column starting at x = 470, centered as a block on the logo's middle (y = 320).
 $x = 470
-$titleFont = Get-Font @('Segoe UI Black', 'Arial Black') 104 ([System.Drawing.FontStyle]::Regular)
-$subFont   = Get-Font @('Segoe UI Semibold', 'Segoe UI') 34 ([System.Drawing.FontStyle]::Regular)
-$rowFont   = Get-Font @('Consolas', 'Lucida Console') 34 ([System.Drawing.FontStyle]::Bold)
-$smallFont = Get-Font @('Segoe UI') 24 ([System.Drawing.FontStyle]::Regular)
-$g.DrawString('VOIDMODS', $titleFont, [System.Drawing.SolidBrush]::new($white), $x - 8, 120)
-$g.DrawString('Mods for FNAF Online Multiplayer', $subFont, [System.Drawing.SolidBrush]::new($purple), $x, 262)
-
-# One row per mod, like the game's menu buttons: box, border, name, a few words, and ">" on the right.
-$y = 340
-foreach ($m in $mods) {
-    $rect = [System.Drawing.Rectangle]::new($x, $y, 700, 76)
-    $g.FillRectangle([System.Drawing.SolidBrush]::new($rowColor), $rect)
-    $g.DrawRectangle([System.Drawing.Pen]::new($borderColor, 4), $rect)
-    $g.DrawString($m.Name, $rowFont, [System.Drawing.SolidBrush]::new($white), $x + 26, $y + 18)
-    $nameWidth = $g.MeasureString($m.Name, $rowFont).Width
-    $g.DrawString($m.About, $smallFont, [System.Drawing.SolidBrush]::new($dim), $x + 40 + $nameWidth, $y + 25)
-    $g.DrawString('>', $rowFont, [System.Drawing.SolidBrush]::new($purple), $x + 650, $y + 16)
-    $y += 96
-}
+$titleFont = Get-Font @('Segoe UI Black', 'Arial Black') 120 ([System.Drawing.FontStyle]::Regular)
+$subFont   = Get-Font @('Segoe UI Semibold', 'Segoe UI') 40 ([System.Drawing.FontStyle]::Regular)
+$smallFont = Get-Font @('Segoe UI') 28 ([System.Drawing.FontStyle]::Regular)
+$g.DrawString('VOIDMODS', $titleFont, [System.Drawing.SolidBrush]::new($white), $x - 10, 150)
+$g.DrawString('Mods for FNAF Online Multiplayer', $subFont, [System.Drawing.SolidBrush]::new($purple), $x, 315)
+# A thin purple line between the subtitle and the credit, like the lines around "Multiplayer" in the game's title.
+$g.FillRectangle([System.Drawing.SolidBrush]::new($borderColor), $x + 2, 385, 640, 4)
+$g.DrawString('MelonLoader mods by Voidmaster01', $smallFont, [System.Drawing.SolidBrush]::new($dim), $x, 405)
 
 $g.Dispose()
 $out = Join-Path $repo 'branding\social-preview.png'
