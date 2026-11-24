@@ -92,7 +92,7 @@ namespace Voidcons
 
             page.Button("Choose picture...", new Action(ChoosePicture));
             page.Button("Remove icon", new Action(RemoveIcon));
-            page.Toggle("Backers: show my picture instead of my backer icon", new Func<bool>(GetOverride), new Action<bool>(BackerOverride.Set));
+            page.Toggle("Backers: use my picture over my backer icon", new Func<bool>(GetOverride), new Action<bool>(BackerOverride.Set));
             page.Button($"Forget remembered backers ({BackerGuard.Count})", new Action(ForgetBackers));
             page.Button("Reload Voidcons", new Action(ReloadMod));
             if (status.Length > 0)

@@ -62,19 +62,28 @@ namespace ModConfigs
             return Element(parent, name, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
         }
 
-        // Fills "target" with a colored box. border = true adds the purple-grey frame the game's rows have
-        // (an Outline effect draws the box's shape again, shifted, in the border color).
+        public const float BorderWidth = 3f;
+
+        // Fills "target" with a colored box. border = true adds the purple-grey frame the game's rows have:
+        // "target" itself is filled with the border color, and a child "Fill" element, 3 units smaller on every
+        // side, holds the real color. Everything stays inside the target's own rectangle, so scroll areas can't
+        // cut the border off (an Outline effect would draw outside it and lose its top and left edges there).
+        // Returns the Image holding the real color (the fill), e.g. for a Button to tint on hover.
         public static Image Box(Transform target, Color color, bool border)
         {
             Image img = target.gameObject.AddComponent<Image>();
-            img.color = color;
-            if (border)
+            if (!border)
             {
-                Outline outline = target.gameObject.AddComponent<Outline>();
-                outline.effectColor = Border;
-                outline.effectDistance = new Vector2(3, -3);
+                img.color = color;
+                return img;
             }
-            return img;
+            img.color = Border;
+            RectTransform fill = Fill(target, "Fill");
+            fill.sizeDelta = new Vector2(-2 * BorderWidth, -2 * BorderWidth); // stretched, minus the border on each side
+            Image inner = fill.gameObject.AddComponent<Image>();
+            inner.color = color;
+            inner.raycastTarget = false; // clicks land on the outer image (the whole box)
+            return inner;
         }
 
         // Text that fills "target", in the game's font. raycastTarget = false: text never blocks clicks.
@@ -94,7 +103,8 @@ namespace ModConfigs
 
         // Makes "target" a clickable button in the game's row style: dark box, border, lighter on hover.
         // arrow = true adds the purple ">" on the right, like the game's menu rows. Returns the label.
-        // The colors live in the Button's ColorBlock (normal / hover / pressed), applied over a white Image.
+        // The colors live in the Button's ColorBlock (normal / hover / pressed), applied over the white fill Image,
+        // so hovering changes the fill while the border stays the same.
         public static TextMeshProUGUI Button(Transform target, string text, Action onClick, bool arrow)
         {
             Image img = Box(target, Color.white, true);
