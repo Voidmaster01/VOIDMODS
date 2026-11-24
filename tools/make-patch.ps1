@@ -6,9 +6,12 @@
     pwsh -NoProfile -File tools\make-patch.ps1 -Id 1                       all VOIDMODS (the default)
     pwsh -NoProfile -File tools\make-patch.ps1 -Id 2 -Mods Voidcons       only some mods (ModConfigs is added when needed)
     pwsh -NoProfile -File tools\make-patch.ps1 -Id 3 -Notes "Fixed X"     a note shown to the player at the end
+    pwsh -NoProfile -File tools\make-patch.ps1 -Id 1 -Name VOIDMODS-FULL  choose the .bat's file name (without .bat)
+    tools\make-patches.ps1 builds the standard set: VOIDMODS-FULL, VOIDMODS-Voidcons, VOIDMODS-ModConfigs.
   WHAT IT NEEDS: the same as build.ps1 (game-path.txt, ModConfigs.dll in the game's Mods folder to compile against).
   The game's Mods folder itself is NOT changed by this script.
-  WHAT IT MAKES: dist\VOIDMODS-patch-<Id>.bat (dist\ is git-ignored). Send that one file to your friends.
+  WHAT IT MAKES: dist\VOIDMODS-patch-<Id>.bat, or dist\<Name>.bat with -Name (dist\ is git-ignored).
+  Send that one file to your friends.
 
   HOW IT WORKS
     1. Builds each chosen mod into a temporary folder (with build.ps1 -Out).
@@ -25,7 +28,8 @@ param(
     [Parameter(Mandatory)][string]$Id,
     [string[]]$Mods = @(),
     [string]$Notes = '',
-    [string]$Title = ''
+    [string]$Title = '',
+    [string]$Name = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -38,7 +42,8 @@ $Mods = @($Mods | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() 
 foreach ($m in $Mods) { if ($m -notin $allMods) { Write-Output "Unknown mod '$m'. Known: $($allMods -join ', ')"; exit 1 } }
 # Every mod except ModConfigs needs ModConfigs, so it is added when missing (and installed first, alphabetically fine).
 if ($Mods | Where-Object { $_ -ne 'ModConfigs' }) { if ('ModConfigs' -notin $Mods) { $Mods = @('ModConfigs') + $Mods } }
-if (-not $Title) { $Title = "VOIDMODS patch $Id" }
+if (-not $Name) { $Name = "VOIDMODS-patch-$Id" }
+if (-not $Title) { $Title = $Name }
 $Title = $Title.Replace("'", '')   # the title sits inside '...' in the .bat's PowerShell line; a ' would end it early
 
 # 1. Build the chosen mods into a temporary folder.
@@ -81,7 +86,7 @@ try {
     # Cut the base64 into 76-character lines (a regex that matches up to 76 characters at a time).
     $lines = ([regex]::Matches($b64, '.{1,76}') | ForEach-Object Value) -join "`r`n"
     New-Item -ItemType Directory -Force "$repo\dist" | Out-Null
-    $out = "$repo\dist\VOIDMODS-patch-$Id.bat"
+    $out = "$repo\dist\$Name.bat"
     $text = $head + ":::DATA`r`n" + $lines + "`r`n:::CODE`r`n" + ($core -replace "`r?`n", "`r`n")
     [IO.File]::WriteAllText($out, $text, [Text.Encoding]::ASCII)   # ASCII, with our own Windows line endings
     "Wrote $out ($([math]::Round((Get-Item $out).Length / 1KB)) KB) with: $($Mods -join ', ')"
