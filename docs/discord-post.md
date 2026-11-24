@@ -13,6 +13,7 @@ Mods for **FNAF Online Multiplayer**, made by Voidmaster01 (MelonLoader 0.7)
  • `VOIDMODS-Voidcons.bat`: Voidcons + ModConfigs
  • `VOIDMODS-ModConfigs.bat`: just the hub
 It finds the game by itself and backs up anything it replaces.
+**FULL is always the release marked "Latest".** Only want or need one mod? Look through the Releases list for its own installer.
 
 ## ℹ️ Good to know
 • Icons travel through the lobby **host**, so the host and everyone who wants to see icons need Voidcons

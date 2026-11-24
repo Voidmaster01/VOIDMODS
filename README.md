@@ -11,8 +11,8 @@ Mods for **FNAF Online Multiplayer** by Brian_mpz, made by Voidmaster01, for [Me
 
 ## Installing (players): pick your mods
 
-Download from the **[Releases](../../releases)** page. Every mod is its own `.dll`, so take only what you want
-(or `VOIDMODS-all.zip` for everything).
+Download from the **[Releases](../../releases)** page. **FULL** (every mod) is always the release marked
+**"Latest"**; every mod also has its own release, so you can take only what you want.
 
 | You want | Download | Needs |
 |---|---|---|
@@ -25,9 +25,13 @@ Download from the **[Releases](../../releases)** page. Every mod is its own `.dl
 
 To update, replace the `.dll` files with the ones from the newest release.
 
-**Or the one-click way:** download `VOIDMODS-patch-<n>.bat` and double-click it. It finds FNAF Online on your PC
+**Or the one-click way:** download an installer `.bat` and double-click it. It finds FNAF Online on your PC
 (or asks you to pick the folder), checks MelonLoader is installed, backs up any mod file it replaces into
-`VOIDMODS-backup\<n>\` in the game folder, and installs the mods. Close the game first.
+`VOIDMODS-backup\` in the game folder, and installs the mods. Close the game first.
+
+- **`VOIDMODS-FULL.bat` (everything) is always the release marked "Latest"**, so it's the first one you see.
+- **Only want or need one mod?** Look through the **[Releases](../../releases)** list for its own installer
+  (`VOIDMODS-Voidcons.bat`, `VOIDMODS-ModConfigs.bat`, ...).
 
 Voidcons notes: icons travel only when the lobby's host has Voidcons too, and only players with Voidcons see them.
 Voidcons never sends, logs or stores player IDs in readable form. (The game itself already shares every player's
