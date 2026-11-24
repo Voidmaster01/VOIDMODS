@@ -6,6 +6,9 @@ MelonLoader/
 Il2CppAssemblies/
 UserData/
 
+# Release builds made by tools\make-release.ps1 (they go to GitHub Releases, not into the repo).
+dist/
+
 # Your own game folder path (each person sets their own).
 game-path.txt
 

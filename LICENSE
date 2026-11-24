@@ -22,24 +22,24 @@ SOFTWARE.
 
 --------------------------------------------------------------------------------
 
-EXCEPTION: THE VOIDMODS LOGO
+THE VOIDMODS LOGO
 
-The MIT License above covers the source code and scripts in this repository.
-It does NOT cover the VOIDMODS logo (the "V" logo), found in:
+The "V" logo is the official icon of ModConfigs (the MOD CONFIGS menu row and
+hub) and of every official VOIDMOD made by Voidmaster01. It is found in:
   - branding/voidmod.png
   - branding/voidmod.ico
   - "Void Mods Icon.png"
-and embedded into the compiled mod files.
+and is embedded into the compiled mod files, where ModConfigs and the official
+VOIDMODS show it.
 
-Copyright (c) 2026 Voidmaster01. All rights reserved.
-
-The logo may be copied and shared only unchanged and only as part of ModConfigs
-or another official VOIDMOD made by Voidmaster01 (including mods of this
-repository and their unmodified copies). It may not be modified, and it may not
-be used to mark, brand or advertise any other mod, project or product, including
-forks of this repository that are not official VOIDMODS. Mods that use the
-ModConfigs ConfigHub must not set the "voidMod" flag (which shows the logo)
-unless they are official VOIDMODS.
+Copyright (c) 2026 Voidmaster01. All rights reserved. The logo is NOT covered by
+the MIT License above. It may be copied and shared, unchanged, as part of
+ModConfigs and the official VOIDMODS (including unmodified copies of their
+releases). It may not be edited, and it may not be used to mark, brand or
+advertise any other mod, project or product, including forks of this repository
+that are not official VOIDMODS. Other mods that add pages to MOD CONFIGS through
+ConfigHub keep the "voidMod" flag (which shows the logo next to a mod) set to
+false.
 
 --------------------------------------------------------------------------------
 

@@ -9,13 +9,22 @@ Every file is commented for beginners, so you can learn from them.
 |---|---|
 | **ModConfigs** | Adds a **MOD CONFIGS** row to the home screen menu: one in-game place for the settings of all your mods. Other mods can add their own page, and every mod's MelonPreferences settings get an automatic page. |
 | **Voidcons** | Your own **player icon**, shown in the backer-icon spot on the character select screen. Pick any picture in the game, move and crop it into a round HD icon, and other Voidcons players see it. Needs ModConfigs. |
-| **NoCharLimit** | Removes the name and chat length limits and adds color codes like `{red}text{/}`. |
 
-## Installing (players)
+## Installing (players): pick your mods
 
-1. Install MelonLoader 0.7 into the game folder and start the game once.
-2. Put `ModConfigs.dll` and `Voidcons.dll` (and/or `NoCharLimit.dll`) in the game's `Mods` folder.
-3. Start the game: **MOD CONFIGS** is in the home screen menu.
+Download from the **[Releases](../../releases)** page. Every mod is its own `.dll`, so take only what you want
+(or `VOIDMODS-all.zip` for everything).
+
+| You want | Download | Needs |
+|---|---|---|
+| The MOD CONFIGS settings hub | `ModConfigs.dll` | nothing else |
+| Your own player icon | `Voidcons.dll` | `ModConfigs.dll` |
+
+1. Install [MelonLoader](https://melonwiki.xyz) 0.7 into the game folder and start the game once.
+2. Put the `.dll` files you picked in the game's `Mods` folder.
+3. Start the game. With ModConfigs, **MOD CONFIGS** is in the home screen menu.
+
+To update, replace the `.dll` files with the ones from the newest release.
 
 Voidcons notes: icons travel only when the lobby's host has Voidcons too, and only players with Voidcons see them.
 Player IDs are never sent, logged or stored in readable form.
@@ -54,16 +63,16 @@ No code at all? Settings made with `MelonPreferences` show up automatically.
 ```
 ModConfigs/   the MOD CONFIGS hub (ConfigHub API, UiKit look, PngReader, menu row, panel)
 Voidcons/     player icons (networking, move-and-crop page, image compression, file picker)
-NoCharLimit/  length limits and color codes
-branding/     the VOIDMODS logo (.png embedded into the DLLs, .ico for Windows)
-tools/        helper scripts (make-ico.ps1)
+branding/     the VOIDMODS logo (.png embedded into ModConfigs, .ico for Windows)
+tools/        helper scripts: make-release.ps1 (release files for GitHub), make-ico.ps1
 build.ps1     builds one mod;  build-all.ps1 builds all of them
 ```
 
 ## License
 
 The code is under the [MIT License](LICENSE): use it, learn from it, build on it, just keep the copyright notice.
-**The VOIDMODS "V" logo is excluded**: it ships unchanged with ModConfigs and official VOIDMODS only, and may not
-be edited or used for other mods. Third-party mods using ConfigHub should leave `voidMod` set to `false`.
+The **VOIDMODS "V" logo** is the official icon of ModConfigs and every official VOIDMOD. It is not part of the MIT
+license: it ships unchanged with those mods and may not be edited or used for other mods. Third-party mods using
+ConfigHub leave `voidMod` set to `false`.
 
 Not affiliated with Brian_mpz. Game files are not included and must not be added to this repo.

@@ -17,7 +17,8 @@
     1. Collects the libraries a mod can use: .NET, MelonLoader, the game's generated code, and (for every mod
        except ModConfigs itself) Mods\ModConfigs.dll, the shared config hub that VOIDMODS build on.
     2. Parses every .cs file in the mod's folder.
-    3. Embeds the files in <Mod>\Resources\ and branding\voidmod.png into the DLL, so the mod needs no extra files.
+    3. Embeds the files in <Mod>\Resources\ into the DLL (and, for ModConfigs only, branding\voidmod.png: ModConfigs
+       shows the logo for every VOIDMOD, so the other mods don't need their own copy).
     4. Compiles in memory and only writes the DLL if the build succeeded (a failed build never breaks a working mod).
 #>
 param(
@@ -60,7 +61,7 @@ $trees = foreach ($cs in Get-ChildItem "$modDir\*.cs") {
 # ---- 3. Embedded files ("manifest resources"), read at runtime with Assembly.GetManifestResourceStream(name) ----
 # A ResourceDescription needs a function that opens the file; [Func[IO.Stream]] turns a script block into one.
 $files = @(Get-ChildItem "$modDir\Resources\*" -File -ErrorAction SilentlyContinue)
-if (Test-Path "$PSScriptRoot\branding\voidmod.png") { $files += Get-Item "$PSScriptRoot\branding\voidmod.png" }
+if ($Mod -eq 'ModConfigs' -and (Test-Path "$PSScriptRoot\branding\voidmod.png")) { $files += Get-Item "$PSScriptRoot\branding\voidmod.png" }
 $resources = [System.Collections.Generic.List[Microsoft.CodeAnalysis.ResourceDescription]]::new()
 foreach ($f in $files) {
     $path = $f.FullName
