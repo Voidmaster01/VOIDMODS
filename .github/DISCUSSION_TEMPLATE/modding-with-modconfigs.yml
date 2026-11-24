@@ -1,0 +1,26 @@
+# Form shown when someone starts a post in the "Modding with ModConfigs" category (file name = the category's slug).
+title: "[ConfigHub] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Questions about adding your mod's page to MOD CONFIGS. The README has the basic example:
+        `ConfigHub.Register("MyMod", "1.0.0", BuildPage);` plus `[assembly: MelonAdditionalDependencies("ModConfigs")]`.
+        Note: the VOIDMODS logo (`voidMod: true`) is only for official VOIDMODS - see LICENSE.
+  - type: input
+    id: modname
+    attributes:
+      label: Your mod
+      description: Its name, and a link if it's public.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What are you trying to do, and what happens? Code snippets are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Code (optional)
+      render: csharp

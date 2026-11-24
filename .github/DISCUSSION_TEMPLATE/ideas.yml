@@ -1,0 +1,21 @@
+# Form shown when someone starts a post in the "Ideas" discussion category (file name = the category's slug).
+title: "[Idea] "
+body:
+  - type: dropdown
+    id: about
+    attributes:
+      label: What is the idea for?
+      options:
+        - ModConfigs
+        - Voidcons
+        - A new VOIDMOD
+        - The installers / releases
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What should it do, and why would it be fun or useful? Mock-ups and screenshots are welcome.
+    validations:
+      required: true

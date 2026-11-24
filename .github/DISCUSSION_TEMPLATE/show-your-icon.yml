@@ -1,0 +1,20 @@
+# Form shown when someone starts a post in the "Show your icon" discussion category (file name = the category's slug).
+title: "My icon: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Show off your Voidcons icon! Please only post pictures you made or are allowed to use,
+        and keep them friendly for everyone.
+  - type: textarea
+    id: picture
+    attributes:
+      label: Your icon
+      description: Drag your picture (or a screenshot from the character select screen) into this box.
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: In-game name (optional)
+      description: So other players recognise you in lobbies.

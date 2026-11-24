@@ -1,0 +1,53 @@
+# Form shown when someone starts a post in the "Bug reports" discussion category (file name = the category's slug).
+title: "[Bug] "
+body:
+  - type: dropdown
+    id: mod
+    attributes:
+      label: Which mod has the bug?
+      multiple: true
+      options:
+        - ModConfigs
+        - Voidcons
+        - An installer (.bat)
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Mod and game versions
+      description: The release you installed (for example voidcons-v1.0.0) and the game version from the home screen.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: Step by step, so we can do it too.
+      placeholder: |
+        1. Open MOD CONFIGS
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should happen, and what happens instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: online
+    attributes:
+      label: Where does it happen?
+      options:
+        - Home screen / MOD CONFIGS
+        - In a lobby I host
+        - In a lobby someone else hosts
+        - Singleplayer
+        - While installing
+  - type: textarea
+    id: log
+    attributes:
+      label: MelonLoader log
+      description: The lines mentioning ModConfigs or Voidcons from MelonLoader\Latest.log in your game folder.
+      render: text

@@ -1,0 +1,50 @@
+# Form shown when someone starts a post in the "Help" discussion category (file name = the category's slug).
+title: "[Help] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for asking! These details help us find the problem fast.
+        Tip: most icon problems are "the lobby host doesn't have Voidcons" - icons only travel through the host.
+  - type: dropdown
+    id: mods
+    attributes:
+      label: Which mods are you using?
+      multiple: true
+      options:
+        - ModConfigs
+        - Voidcons
+        - Other mods (list them below)
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install them?
+      options:
+        - VOIDMODS-FULL.bat
+        - VOIDMODS-Voidcons.bat
+        - VOIDMODS-ModConfigs.bat
+        - Copied the .dll files by hand
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game version
+      description: Shown at the bottom left of the home screen, for example V0.9.7-ALPHA
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's going wrong?
+      description: What did you do, what did you expect, and what happened instead? Screenshots help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: MelonLoader log (optional)
+      description: Paste the lines mentioning ModConfigs or Voidcons from MelonLoader\Latest.log in your game folder.
+      render: text

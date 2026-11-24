@@ -72,6 +72,11 @@ tools/        helper scripts: make-release.ps1 (release files for GitHub), make-
 build.ps1     builds one mod;  build-all.ps1 builds all of them
 ```
 
+## Questions, bugs and ideas
+
+Head to **[Discussions](../../discussions)**: ask for help, report bugs, suggest ideas, show off your Voidcons icon,
+or ask about adding your own mod to MOD CONFIGS.
+
 ## License
 
 The code is under the [MIT License](LICENSE): use it, learn from it, build on it, just keep the copyright notice.
