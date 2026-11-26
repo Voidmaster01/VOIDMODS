@@ -119,11 +119,13 @@ namespace ModConfigs
             Add(cat, s, Key.A, "Close left door", GamepadButton.LeftShoulder);
             Add(cat, s, Key.D, "Close right door", GamepadButton.RightShoulder);
             Add(cat, s, Key.S, "Flip monitor up/down", GamepadButton.North);
+            // Security can close the doors with the monitor up, so they keep LB/RB and the tabs go on the D-pad
+            // (Voidmaster01's choice).
             s = Section("SecurityMonitor", "Security Office: monitor up", PlayerRoles.SecurityOffice, false, "up", null);
-            Add(cat, s, Key.A, "Close left door", GamepadButton.DpadLeft);
-            Add(cat, s, Key.D, "Close right door", GamepadButton.DpadRight);
+            Add(cat, s, Key.A, "Close left door", GamepadButton.LeftShoulder);
+            Add(cat, s, Key.D, "Close right door", GamepadButton.RightShoulder);
             Add(cat, s, Key.S, "Flip monitor up/down", GamepadButton.North);
-            Tabs(cat, s);
+            Tabs(cat, s, GamepadButton.DpadLeft, GamepadButton.DpadRight);
 
             s = Section("PartsService", "Parts & Service: laptop closed", PlayerRoles.PartsAndService, false, "down", null);
             Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
@@ -196,10 +198,11 @@ namespace ModConfigs
 
         // The laptop / monitor tab bar is mouse-only in the game; these keys are ADDED (Voidmaster01: LB/RB). They
         // call the game's own next / previous tab functions (GameContext.NextTab / PreviousTab).
-        private static void Tabs(MelonPreferences_Category cat, KeySection s)
+        // prev / next: the default controller buttons (LB / RB unless a role needs those for something else).
+        private static void Tabs(MelonPreferences_Category cat, KeySection s, GamepadButton prev = GamepadButton.LeftShoulder, GamepadButton next = GamepadButton.RightShoulder)
         {
-            Add(cat, s, Key.Q, "Previous tab (added by ModConfigs)", GamepadButton.LeftShoulder).OnPress = new Action(GameContext.PreviousTab);
-            Add(cat, s, Key.E, "Next tab (added by ModConfigs)", GamepadButton.RightShoulder).OnPress = new Action(GameContext.NextTab);
+            Add(cat, s, Key.Q, "Previous tab (added by ModConfigs)", prev).OnPress = new Action(GameContext.PreviousTab);
+            Add(cat, s, Key.E, "Next tab (added by ModConfigs)", next).OnPress = new Action(GameContext.NextTab);
         }
 
         // is_hidden = true: the entries don't get their own automatic rows in MOD CONFIGS; our page shows them instead.
