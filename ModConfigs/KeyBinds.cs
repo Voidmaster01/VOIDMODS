@@ -170,7 +170,7 @@ namespace ModConfigs
             // No mask while the monitor is up (Voidmaster01 tested it).
             s = Section("JanitorMonitor", "Janitor's Closet: monitor up", PlayerRoles.Janitor, false, "up", null);
             Add(cat, s, Key.D, "Flip monitor up/down", GamepadButton.North);
-            Tabs(cat, s);
+            Tabs(cat, s, GamepadButton.LeftShoulder, GamepadButton.RightShoulder, true); // the Janitor: trackers + lures
 
             s = Section("FreddySpace", "Janitor: Freddy in Space (minigame)", PlayerRoles.Janitor, true, "up",
                 "On top of \"monitor up\" while the Games tab is open. Your monitor and tab keys keep working.");
@@ -200,16 +200,22 @@ namespace ModConfigs
         // The laptop / monitor tab bar is mouse-only in the game; these keys are ADDED (Voidmaster01: LB/RB). They
         // call the game's own next / previous tab functions (GameContext.NextTab / PreviousTab).
         // prev / next: the default controller buttons (LB / RB unless a role needs those for something else).
-        private static void Tabs(MelonPreferences_Category cat, KeySection s, GamepadButton prev = GamepadButton.LeftShoulder, GamepadButton next = GamepadButton.RightShoulder)
+        // janitor: the Janitor has no cameras but trackers (Motion Detection) and lures (Audio Lure), and only he
+        // gets the "use" key; the other roles step through cameras.
+        private static void Tabs(MelonPreferences_Category cat, KeySection s, GamepadButton prev = GamepadButton.LeftShoulder,
+            GamepadButton next = GamepadButton.RightShoulder, bool janitor = false)
         {
             Add(cat, s, Key.Q, "Previous tab (added by ModConfigs)", prev).OnPress = new Action(GameContext.PreviousTab);
             Add(cat, s, Key.E, "Next tab (added by ModConfigs)", next).OnPress = new Action(GameContext.NextTab);
-            // Cameras / trackers / lures in reading order (Voidmaster01: LT / RT); see GameContext.StepItem.
-            Add(cat, s, Key.Z, "Previous camera / button on screen (added)", GamepadButton.LeftTrigger).OnPress = new Action(GameContext.PreviousItem);
-            Add(cat, s, Key.C, "Next camera / button on screen (added)", GamepadButton.RightTrigger).OnPress = new Action(GameContext.NextItem);
+            // Cameras in number order, trackers / lures in reading order (Voidmaster01: LT / RT); see GameContext.StepItem.
+            string things = janitor ? "tracker / lure" : "camera";
+            Add(cat, s, Key.Z, "Previous " + things + " (added)", GamepadButton.LeftTrigger).OnPress = new Action(GameContext.PreviousItem);
+            Add(cat, s, Key.C, "Next " + things + " (added)", GamepadButton.RightTrigger).OnPress = new Action(GameContext.NextItem);
+            if (!janitor)
+                return;
             // Stepping never fires a lure or a tracker (lures only work twice, trackers shouldn't stay on): this key
             // clicks the button the cursor is on. On a controller A / Cross is already that click, so no button here.
-            AddRow(cat, s, Key.F, "Use the selected button: lure, tracker (added)", "None").OnPress = new Action(Controller.ClickAtCursor);
+            AddRow(cat, s, Key.F, "Use the selected lure / tracker (added)", "None").OnPress = new Action(Controller.ClickAtCursor);
         }
 
         // Number keys 1-9 (and the number pad) pick cameras while the Cameras tab is open; one switch for all roles.
