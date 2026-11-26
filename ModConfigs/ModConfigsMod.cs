@@ -9,7 +9,8 @@
 //       too (see FileConfigs.cs).
 //   1.1.0 also added: text boxes, sliders, dropdowns and color pickers, a search box, RESET TO DEFAULTS, a
 //   GET MODS button that leads to the Mod Menu mod, it turns off the game's "Hold D to clear Save Data", and it
-//   has a built-in "Key Binds" page: change the game's keys, plus a DANGER ZONE to clear the save on purpose.
+//   has a built-in "Key Binds" page: change the game's keys per role and per minigame (keyboard and controller),
+//   plus a DANGER ZONE to clear the save on purpose.
 //   It also gives VOIDMODS a shared look and picture tools (UiKit.cs, PngReader.cs).
 //
 // HOW TO BUILD AND RUN
@@ -26,6 +27,7 @@
 //   FileConfigs.cs: other mods' own config files              NoClearData.cs: turns off hold-D clear save data
 //   GameSave.cs: back up / clear the save on purpose          KeyBinds.cs + DangerZone.cs: the built-in Key Binds page
 //   Controller.cs: Xbox / PlayStation / other controllers (also on the Key Binds page)
+//   GameContext.cs: which role / minigame is being played, so key binds can differ per role
 //   ModPanel.cs: a ready-made panel other mods can open (the Mod Menu's MODS panel)
 
 using MelonLoader;
@@ -59,6 +61,7 @@ namespace ModConfigs
             HubPanel.Tick();   // rebuilds the panel page when a click asked for it (on the next frame, see HubPanel.Later)
             ModPanel.Tick();   // the same for a ModPanel (like the Mod Menu's MODS panel)
             FileConfigs.Tick();
+            GameContext.Tick(); // which role / minigame is being played (key binds are per role), checked 10x a second
             KeyBinds.Tick();   // waits for a key while a key bind shows "PRESS A KEY..."
             Controller.Tick(); // controller: cursor, click, scroll, Esc/Tab, and "PRESS A BUTTON..."
             DangerZone.Tick(); // the DANGER ZONE button's countdown

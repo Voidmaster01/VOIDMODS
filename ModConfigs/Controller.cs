@@ -2,12 +2,15 @@
 // controller Windows supports. The game itself only knows keyboard and mouse.
 //
 // WHAT IT DOES
-//   - Game keys on buttons: each of the game's keys (W, A, S, D, Space; see KeyBinds.cs) also listens to a controller
-//     button. Defaults: LB/L1 = A, RB/R1 = D, Y/Triangle = S, B/Circle = W, X/Square = Space. All can be changed.
+//   - Game keys on buttons: every key bind row (per role and per minigame, see KeyBinds.cs) also has a controller
+//     button. Role defaults: LB/L1 = A, RB/R1 = D, Y/Triangle = S, B/Circle = W, X/Square = Space; Midnight Motorist
+//     drives with the D-pad. All can be changed, separately for every role and minigame. Only the rows of the role
+//     (and minigame) being played count, so outside a night the buttons press no game keys at all.
 //   - The mouse on the controller (cameras, buttons and Purple Guy need it): the left stick moves the cursor,
 //     A/Cross is a left click, the right stick scrolls.
 //   - Menu buttons: Start/Options = Esc (settings), View/Share = Tab (chat).
-//   The settings are on ModConfigs' Key Binds page, section CONTROLLER, saved in MelonPreferences (category KeyBinds).
+//   The settings are on ModConfigs' Key Binds page (CONTROLLER at the top, the buttons in each key bind row), saved in
+//   MelonPreferences (category KeyBinds).
 //
 // HOW IT WORKS
 //   Unity's Input System (which the game uses) already understands Xbox controllers (XInput) and PlayStation
@@ -36,76 +39,74 @@ namespace ModConfigs
 
         private static MelonPreferences_Entry<bool> enabled;
         private static MelonPreferences_Entry<float> cursorSpeed;
-        // Game key -> its controller button setting (the GamepadButton's name, e.g. "LeftShoulder"; "None" = no button).
-        private static readonly Dictionary<Key, MelonPreferences_Entry<string>> buttons = new Dictionary<Key, MelonPreferences_Entry<string>>();
+        // (Each key bind row's controller button is saved with the row itself: Bind.PadEntry in KeyBinds.cs.)
 
         // Called by KeyBinds.Load, after the keyboard settings, so both live in the same category.
         public static void Load(MelonPreferences_Category cat)
         {
             enabled = cat.CreateEntry("Pad_Enabled", true, "Controller support", null, true);
             cursorSpeed = cat.CreateEntry("Pad_CursorSpeed", 1.0f, "Cursor speed", null, true);
-            AddButton(cat, Key.A, GamepadButton.LeftShoulder);
-            AddButton(cat, Key.D, GamepadButton.RightShoulder);
-            AddButton(cat, Key.S, GamepadButton.North);   // Y on Xbox, Triangle on PlayStation
-            AddButton(cat, Key.W, GamepadButton.East);    // B / Circle
-            AddButton(cat, Key.Space, GamepadButton.West); // X / Square
-        }
-
-        private static void AddButton(MelonPreferences_Category cat, Key key, GamepadButton def)
-        {
-            buttons[key] = cat.CreateEntry("Pad_" + key, NameOf(def), "Controller button for " + key, null, true);
         }
 
         public static bool Enabled { get { return enabled != null && enabled.Value; } }
 
-        // The button chosen for a game key; false when none (or the saved name is broken).
-        private static bool ButtonFor(Key key, out GamepadButton button)
+        // The button saved in a row; false when none (or the saved name is broken).
+        private static bool ButtonFor(Bind b, out GamepadButton button)
         {
             button = GamepadButton.South;
-            MelonPreferences_Entry<string> e;
-            return buttons.TryGetValue(key, out e) && e.Value != "None" && Enum.TryParse(e.Value, out button);
+            return b.PadEntry.Value != "None" && Enum.TryParse(b.PadEntry.Value, out button);
         }
 
+        // Called by KeyBinds.ResetAll (which resets the rows' buttons itself).
         public static void ResetAll()
         {
             enabled.Value = true;
             cursorSpeed.Value = 1.0f;
-            buttons[Key.A].Value = NameOf(GamepadButton.LeftShoulder);
-            buttons[Key.D].Value = NameOf(GamepadButton.RightShoulder);
-            buttons[Key.S].Value = NameOf(GamepadButton.North);
-            buttons[Key.W].Value = NameOf(GamepadButton.East);
-            buttons[Key.Space].Value = NameOf(GamepadButton.West);
         }
 
         // ================= game keys: real key presses =================
-        // While a bound controller button is held, the chosen keyboard key (KeyBinds.ChosenKey) is held down for real
-        // through Windows; when the button is let go, so is the key. Tested: the game only looks at its keys after a
-        // real keyboard event, so answering from inside (like the key binds do) isn't enough for a controller.
+        // While a row's controller button is held, the keyboard key chosen in that row is held down for real through
+        // Windows; when the button is let go, so is the key. Tested: the game only looks at its keys after a real
+        // keyboard event, so answering from inside (like the key binds do) isn't enough for a controller.
+        // "held" remembers WHICH key was actually pressed for each game key, because the role, the minigame or the
+        // chosen key may change while the button is still down; the release must let go of the same key.
 
-        private static readonly HashSet<Key> held = new HashSet<Key>(); // game keys we are holding down right now
+        private static readonly Dictionary<Key, Key> held = new Dictionary<Key, Key>(); // game key -> key we hold down
+        private static readonly Dictionary<Key, Key> wanted = new Dictionary<Key, Key>(); // reused every frame
 
         private static void UpdateGameKeys(Gamepad pad)
         {
-            foreach (Key gameKey in buttons.Keys)
+            // 1. Which game keys should be down now, and as which keyboard key (only the rows that apply right now).
+            wanted.Clear();
+            foreach (Bind b in KeyBinds.ActiveBinds)
             {
-                GamepadButton b;
-                bool now = ButtonFor(gameKey, out b) && Snapshot(pad, b).Now;
-                if (now && !held.Contains(gameKey))
-                {
-                    if (SendKey(KeyBinds.ChosenKey(gameKey), true))
-                        held.Add(gameKey);
-                }
-                else if (!now && held.Remove(gameKey)) // Remove returns true if it was held
-                    SendKey(KeyBinds.ChosenKey(gameKey), false);
+                GamepadButton btn;
+                if (ButtonFor(b, out btn) && Snapshot(pad, btn).Now)
+                    wanted[b.GameKey] = KeyBinds.Chosen(b);
             }
+            // 2. Let go of keys that are no longer wanted (or that changed). The loop walks a copy (new List(held)),
+            //    because a Dictionary can't be changed while a foreach walks through it.
+            foreach (KeyValuePair<Key, Key> h in new List<KeyValuePair<Key, Key>>(held))
+            {
+                Key want;
+                if (!wanted.TryGetValue(h.Key, out want) || want != h.Value)
+                {
+                    SendKey(h.Value, false);
+                    held.Remove(h.Key);
+                }
+            }
+            // 3. Press the new ones.
+            foreach (KeyValuePair<Key, Key> w in wanted)
+                if (!held.ContainsKey(w.Key) && SendKey(w.Value, true))
+                    held[w.Key] = w.Value;
         }
 
         // Lets go of every key we hold (when the game loses focus or controller support is switched off), so no key
         // ever stays stuck down in Windows.
         private static void ReleaseKeys()
         {
-            foreach (Key k in held)
-                SendKey(KeyBinds.ChosenKey(k), false);
+            foreach (Key k in held.Values)
+                SendKey(k, false);
             held.Clear();
         }
 
@@ -184,7 +185,7 @@ namespace ModConfigs
 
         private static bool clickDown;          // is our left click held right now?
         private static float scrollLeft;        // scroll that wasn't sent yet (wheel steps are whole notches)
-        private static Key captureKey = Key.None; // the game key waiting for "press a button...", or None
+        private static Bind captureBind;        // the key bind row waiting for "press a button...", or null
         private static float captureStarted;
 
         // Called every frame by ModConfigsMod.
@@ -196,19 +197,27 @@ namespace ModConfigs
             KeyBinds.Bypass = true; // our own reads of the controller must not be remapped
             try
             {
-                if (captureKey != Key.None)
+                if (captureBind != null)
                 {
                     Capture(pad);
                     return;
                 }
-                // Look at every bound button once per frame, so "last frame" is always really the last frame.
+                // Look at every button that counts right now once per frame, so "last frame" is really the last frame.
                 if (Enabled)
-                    foreach (Key k in buttons.Keys)
+                {
+                    foreach (Bind row in KeyBinds.ActiveBinds)
                     {
                         GamepadButton b;
-                        if (ButtonFor(k, out b))
+                        if (ButtonFor(row, out b))
                             Snapshot(pad, b);
                     }
+                    foreach (Bind row in KeyBinds.ActiveActions)
+                    {
+                        GamepadButton b;
+                        if (ButtonFor(row, out b))
+                            Snapshot(pad, b);
+                    }
+                }
                 if (!Enabled || !GameHasFocus())
                 {
                     ReleaseClick();
@@ -216,6 +225,17 @@ namespace ModConfigs
                     return;
                 }
                 UpdateGameKeys(pad);
+                // Added keys (Purple Guy's screens): run once when the button goes down (Now, and not Before).
+                foreach (Bind row in KeyBinds.ActiveActions)
+                {
+                    GamepadButton b;
+                    if (ButtonFor(row, out b))
+                    {
+                        Snap s = Snapshot(pad, b);
+                        if (s.Now && !s.Before)
+                            KeyBinds.Press(row);
+                    }
+                }
                 MoveCursor(pad);
                 // Left click on A / Cross: press when the button goes down, release when it comes up.
                 bool south = pad.buttonSouth.isPressed;
@@ -309,9 +329,12 @@ namespace ModConfigs
 
         // ================= "press a button..." =================
 
-        private static void StartCapture(Key key)
+        internal static bool IsCapturing(Bind b) { return captureBind == b; }
+
+        // Called by a key bind row's controller button (KeyBinds.cs).
+        internal static void StartCapture(Bind row)
         {
-            captureKey = captureKey == key ? Key.None : key; // clicking again cancels
+            captureBind = captureBind == row ? null : row; // clicking again cancels
             captureStarted = Time.unscaledTime;
             // Buttons already held when capture starts (like A / Cross used to click this button) only count once
             // they are let go and pressed again.
@@ -343,12 +366,12 @@ namespace ModConfigs
                 try { c = pad[b]; } catch { continue; }
                 if (c == null || !Down(b, c.isPressed))
                     continue;
+                Bind row = captureBind;
+                captureBind = null;
                 if (b == GamepadButton.Select)
-                    buttons[captureKey].Value = "None";
+                    KeyBinds.SavePad(row, "None");
                 else if (b != GamepadButton.Start)
-                    buttons[captureKey].Value = NameOf(b);
-                MelonPreferences.GetCategory(KeyBinds.Category).SaveToFile(false);
-                captureKey = Key.None;
+                    KeyBinds.SavePad(row, NameOf(b));
                 ConfigHub.Refresh();
                 return;
             }
@@ -356,7 +379,7 @@ namespace ModConfigs
 
         // GamepadButton gives the same button several names with the SAME number (A = South = Cross), so ToString() could
         // print any of them. NameOf always saves the position name (South, East, West, North) for those four.
-        private static string NameOf(GamepadButton b)
+        internal static string NameOf(GamepadButton b)
         {
             if (b == GamepadButton.South) return "South";
             if (b == GamepadButton.East) return "East";
@@ -366,7 +389,7 @@ namespace ModConfigs
         }
 
         // Names for people, with the Xbox and the PlayStation name.
-        private static string Pretty(string saved)
+        internal static string Pretty(string saved)
         {
             GamepadButton b;
             if (saved == "None" || !Enum.TryParse(saved, out b))
@@ -393,8 +416,9 @@ namespace ModConfigs
 
         // ================= the page section =================
 
-        // keys: the game keys in page order, with what they do (from KeyBinds).
-        public static void BuildSection(ConfigPage page, IList<KeyValuePair<Key, string>> keys)
+        // The general controller settings at the top of the Key Binds page. Each key bind row below has its own
+        // controller button (KeyBinds.Row).
+        public static void BuildSection(ConfigPage page)
         {
             page.Header("Controller");
             Gamepad pad = Gamepad.current;
@@ -402,24 +426,8 @@ namespace ModConfigs
                 .color = pad != null ? UiKit.Purple : UiKit.DimText;
             page.Toggle("Controller support", new Func<bool>(GetEnabled), new Action<bool>(SetEnabled));
             page.Slider("Cursor speed (left stick)", new Func<double>(GetSpeed), new Action<double>(SetSpeed), 0.3, 3.0, "0.0");
-            page.Label("Fixed: left stick = cursor, A / Cross = click, right stick = scroll, Start / Options = Esc, View / Share = Tab. "
-                + "Click a button below, then press the controller button for it (Start cancels, View / Share clears it).", 18).color = UiKit.DimText;
-            foreach (KeyValuePair<Key, string> k in keys)
-                Row(page, k.Key, k.Value);
-        }
-
-        private static void Row(ConfigPage page, Key key, string what)
-        {
-            RectTransform row = page.Custom(70);
-            UiKit.Box(row, UiKit.RowColor, true);
-            RectTransform left = UiKit.Element(row, "Label", new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0.5f), new Vector2(20, 0), new Vector2(-300, -10));
-            TextMeshProUGUI t = UiKit.Text(left, KeyBinds.Pretty(key) + " key\n<size=15><color=#8c859e>" + what + "</color></size>", 22, UiKit.TextColor, TextAlignmentOptions.MidlineLeft);
-            t.overflowMode = TextOverflowModes.Ellipsis;
-            RectTransform btn = UiKit.Element(row, "Button", new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(260, 52));
-            var click = new CaptureClick(key);
-            TextMeshProUGUI label = UiKit.Button(btn, captureKey == key ? "PRESS A BUTTON..." : Pretty(buttons[key].Value), new Action(click.Click), false);
-            label.fontSize = 20;
-            if (captureKey == key) label.color = UiKit.Purple;
+            page.Label("Always: left stick = cursor, A / Cross = click, right stick = scroll, Start / Options = Esc, View / Share = Tab. "
+                + "The game's keys are on buttons per role, in the rows below.", 18).color = UiKit.DimText;
         }
 
         private static bool GetEnabled() { return enabled.Value; }
@@ -427,13 +435,6 @@ namespace ModConfigs
         private static double GetSpeed() { return cursorSpeed.Value; }
         private static void SetSpeed(double v) { cursorSpeed.Value = (float)v; Save(); }
         private static void Save() { MelonPreferences.GetCategory(KeyBinds.Category).SaveToFile(false); }
-
-        private sealed class CaptureClick
-        {
-            private readonly Key key;
-            public CaptureClick(Key k) { key = k; }
-            public void Click() { StartCapture(key); }
-        }
 
         // ================= Windows functions (user32.dll) =================
         // [DllImport] tells .NET "this function is inside user32.dll, a part of Windows". The numbers are the flags

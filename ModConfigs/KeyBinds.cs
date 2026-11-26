@@ -1,24 +1,32 @@
 // KeyBinds.cs - part of ModConfigs (new in 1.1.0): lets players change the keys FNAF Online uses (the game has no
-// key binds of its own). It is ModConfigs' own built-in "Key Binds" page, together with the DANGER ZONE
-// (DangerZone.cs). The Mod Menu mod only has a button that opens this page (Voidmaster01's decision: settings
-// live in ModConfigs).
+// key binds of its own), SEPARATELY FOR EACH ROLE AND EACH MINIGAME, on the keyboard and on a controller. It is
+// ModConfigs' own built-in "Key Binds" page, together with the CONTROLLER settings (Controller.cs) and the DANGER ZONE
+// (DangerZone.cs). The Mod Menu mod only has a button that opens this page (Voidmaster01's decision: settings live in
+// ModConfigs). Binding is done here on the home screen, never during a night (Voidmaster01's decision).
 //
 // WHAT IT DOES
-//   The game's roles use five keys (from its How to Play manual):
-//     W      Open/close door (Parts & Services, Backstage)
-//     A      Close left door (Security) / Look left (Parts & Services, Backstage) / Mask (Janitor)
-//     S      Flip monitor (Security) / Shock (Backstage)
-//     D      Close right door (Security) / Look right (Parts & Services, Backstage) / Monitor (Janitor)
-//     Space  Open/close laptop (Parts & Services)
-//   Each can be moved to any other key. The choices are saved in UserData\MelonPreferences.cfg (category KeyBinds).
+//   The page has one section per role and per minigame, listing only the keys that role uses (from the game's own
+//   TIPS screens and role cards, collected by Voidmaster01):
+//     Security Office        A close left door, D close right door, S flip monitor
+//     Parts & Service        A look left, D look right, Space open/close laptop, W open/close door
+//       Midnight Motorist    W A S D drive (the laptop's Games tab; the arrow keys always work too)
+//     Backstage              A look left, D look right, S shock, W open/close door
+//     Janitor's Closet       A open/close mask, D flip monitor
+//       Freddy in Space      Space fly (the laptop's Games tab)
+//     Purple Guy             A open/close left screen, D right screen: keys the game DOESN'T have (it only has the
+//                            mouse on the screen-edge bars), ADDED by ModConfigs (Voidmaster01's defaults, LB/RB too)
+//   Every row has a keyboard key and a controller button. GameContext.cs tells which section applies right now:
+//   the player's role, plus the minigame's section ON TOP while its Games tab is open (the minigame's keys win, the
+//   role's other keys keep working, so the Janitor's mask still works while flying). Outside a night, and while dead
+//   or spectating, nothing is changed. Saved in UserData\MelonPreferences.cfg, category KeyBinds, as
+//   Key_<section>_<key> and Pad_<section>_<key>.
 //
-// HOW THE REMAPPING WORKS
+// HOW THE KEYBOARD REMAPPING WORKS
 //   The game reads these keys with Unity's new Input System, by asking a key object "isPressed?" (also
 //   "wasPressedThisFrame?" and "wasReleasedThisFrame?"). Those questions are property reads on ButtonControl
 //   (every key is a ButtonControl), so three Harmony prefixes sit in front of them. When the game asks about a key
-//   that was moved, the prefix asks the NEW key instead and returns that answer; the game never knows.
-//   Example: W moved to Up Arrow -> the game asks "is W pressed?" -> we answer with "is Up Arrow pressed?".
-//   The old key then does nothing for the game (unless another binding uses it), which is what players expect.
+//   that was moved in the CURRENT section, the prefix asks the NEW key instead and returns that answer.
+//   Example: Security's A moved to Left Arrow -> the game asks "is A pressed?" -> we answer "is Left Arrow pressed?".
 //   We found this by testing: a probe mod showed the game asking /Keyboard/w, a, s, d through isPressed.
 //
 // LIMITS
@@ -26,39 +34,59 @@
 //   which crashes the game when patched), so they can't be moved here. The game's own Settings has the mute key.
 //
 // CONTROLLERS
-//   Controller.cs presses the REAL keyboard key (the one chosen here) while its controller button is held, because
-//   the game only looks at its keys after a real keyboard event (tested: it never asked about A while only a
-//   controller button was pressed). ChosenKey tells it which key to press. The page shows the controller settings
-//   between the keys and the DANGER ZONE.
+//   Controller.cs presses the REAL keyboard key (the one chosen here for the current section) while the row's
+//   controller button is held, because the game only looks at its keys after a real keyboard event (tested).
+//   ActiveBinds tells it which rows apply right now.
 
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using Il2Cpp;
 using Il2CppTMPro;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using UnityEngine.InputSystem.LowLevel;
 
 namespace ModConfigs
 {
+    // One row on the page: a game key in one section, what it does there, and the two saved choices.
+    internal sealed class Bind
+    {
+        public KeySection Section;
+        public Key GameKey;                                // the key the game asks about
+        public string What;                                // what it does in this section
+        public string DefaultPad;                          // default controller button (GamepadButton name)
+        public MelonPreferences_Entry<string> KeyEntry;    // the keyboard key chosen (Key name, e.g. "UpArrow")
+        public MelonPreferences_Entry<string> PadEntry;    // the controller button chosen ("None" = no button)
+        // Set for keys the game DOESN'T have and ModConfigs adds (Purple Guy's screens): pressing the key or button
+        // runs this instead of answering the game's key questions. GameKey is then only the default key.
+        public Action OnPress;
+    }
+
+    // One section: a role, or a role's minigame.
+    internal sealed class KeySection
+    {
+        public string Id;            // used in the setting names, e.g. "Janitor"
+        public string Title;         // shown on the page
+        public string Note;          // a dim line under the title (may be null)
+        public PlayerRoles Role;
+        public bool Minigame;        // true = applies on top of the role's section while the Games tab is open
+        public readonly List<Bind> Binds = new List<Bind>();
+    }
+
     internal static class KeyBinds
     {
         public const string Category = "KeyBinds";
         public const string PageName = "Key Binds";
 
-        // One rebindable game key: the key the game asks about, what it does, and the saved setting holding the
-        // key the player chose (as the Key enum's name, e.g. "UpArrow").
-        private sealed class Bind
-        {
-            public Key GameKey;
-            public string What;
-            public MelonPreferences_Entry<string> Entry;
-        }
+        private static readonly List<KeySection> sections = new List<KeySection>();
 
-        private static readonly List<Bind> binds = new List<Bind>();
-
-        // The moved keys only: game key -> chosen key. Looked up on every key question, so a Dictionary (fast).
+        // What applies RIGHT NOW (rebuilt when the role, the minigame or a choice changes):
+        //   active: game key -> its row (role rows, minigame rows replacing the role's for the same key)
+        //   remap:  only the moved keys, game key -> chosen key. Looked up on every key question, so a Dictionary.
+        private static readonly Dictionary<Key, Bind> active = new Dictionary<Key, Bind>();
         private static readonly Dictionary<Key, Key> remap = new Dictionary<Key, Key>();
 
         // True while our own code reads keys, so the prefixes below don't remap OUR reads (that would loop forever:
@@ -74,80 +102,161 @@ namespace ModConfigs
 
         // ================= settings =================
 
-        // Creates the settings (or reads them back from MelonPreferences.cfg) and builds the remap table.
+        // Creates the sections and settings (or reads them back from MelonPreferences.cfg).
         public static void Load()
         {
             MelonPreferences_Category cat = MelonPreferences.CreateCategory(Category, PageName);
-            Add(cat, Key.W, "Open/close door (Parts & Services, Backstage)");
-            Add(cat, Key.A, "Close left door (Security) / Look left (Parts & Services, Backstage) / Mask (Janitor)");
-            Add(cat, Key.S, "Flip monitor (Security) / Shock (Backstage)");
-            Add(cat, Key.D, "Close right door (Security) / Look right (Parts & Services, Backstage) / Monitor (Janitor)");
-            Add(cat, Key.Space, "Open/close laptop (Parts & Services)");
-            Controller.Load(cat); // the controller settings live in the same category (Controller.cs)
+            KeySection s;
+
+            s = Section("Security", "Security Office", PlayerRoles.SecurityOffice, false, null);
+            Add(cat, s, Key.A, "Close left door", GamepadButton.LeftShoulder);
+            Add(cat, s, Key.D, "Close right door", GamepadButton.RightShoulder);
+            Add(cat, s, Key.S, "Flip monitor up/down", GamepadButton.North);
+
+            s = Section("PartsService", "Parts & Service", PlayerRoles.PartsAndService, false, null);
+            Add(cat, s, Key.A, "Look left", GamepadButton.LeftShoulder);
+            Add(cat, s, Key.D, "Look right", GamepadButton.RightShoulder);
+            Add(cat, s, Key.Space, "Open/close laptop", GamepadButton.West);
+            Add(cat, s, Key.W, "Open/close door", GamepadButton.East);
+
+            s = Section("Motorist", "Parts & Service: Midnight Motorist (minigame)", PlayerRoles.PartsAndService, true,
+                "While the laptop's Games tab is open. The arrow keys always drive too.");
+            Add(cat, s, Key.W, "Drive up", GamepadButton.DpadUp);
+            Add(cat, s, Key.A, "Drive left", GamepadButton.DpadLeft);
+            Add(cat, s, Key.S, "Drive down", GamepadButton.DpadDown);
+            Add(cat, s, Key.D, "Drive right", GamepadButton.DpadRight);
+
+            s = Section("Backstage", "Backstage", PlayerRoles.Backstage, false, null);
+            Add(cat, s, Key.A, "Look left", GamepadButton.LeftShoulder);
+            Add(cat, s, Key.D, "Look right", GamepadButton.RightShoulder);
+            Add(cat, s, Key.S, "Shock", GamepadButton.North);
+            Add(cat, s, Key.W, "Open/close door", GamepadButton.East);
+
+            s = Section("Janitor", "Janitor's Closet", PlayerRoles.Janitor, false, null);
+            Add(cat, s, Key.A, "Open/close mask", GamepadButton.LeftShoulder);
+            Add(cat, s, Key.D, "Flip monitor up/down", GamepadButton.RightShoulder);
+
+            s = Section("FreddySpace", "Janitor: Freddy in Space (minigame)", PlayerRoles.Janitor, true,
+                "While the laptop's Games tab is open. Your mask and monitor keys keep working.");
+            Add(cat, s, Key.Space, "Fly (hold)", GamepadButton.West);
+
+            // Purple Guy has no keys in the game: his screens open only with the mouse on the bars at the screen edges.
+            // These two keys are ADDED by ModConfigs (Voidmaster01's defaults: A/D and LB/RB); see GameContext.cs.
+            s = Section("PurpleGuy", "Purple Guy", PlayerRoles.PurpleGuy, false,
+                "The game only has the mouse for these; ModConfigs adds the keys. They don't fire while you type in a text box.");
+            Add(cat, s, Key.A, "Open/close left screen", GamepadButton.LeftShoulder).OnPress = new Action(GameContext.FlipPurpleLeft);
+            Add(cat, s, Key.D, "Open/close right screen", GamepadButton.RightShoulder).OnPress = new Action(GameContext.FlipPurpleRight);
+
+            Controller.Load(cat); // the controller's general settings live in the same category (Controller.cs)
+            GameContext.Changed += Rebuild; // "+=" subscribes: Rebuild runs every time the role or minigame changes
             Rebuild();
         }
 
-        // is_hidden = true: the entry doesn't get its own automatic row in MOD CONFIGS; our page shows it instead.
-        private static void Add(MelonPreferences_Category cat, Key key, string what)
+        private static KeySection Section(string id, string title, PlayerRoles role, bool minigame, string note)
         {
-            MelonPreferences_Entry<string> e = cat.CreateEntry("Key_" + key, key.ToString(), "Key for " + key, what, true);
-            binds.Add(new Bind { GameKey = key, What = what, Entry = e });
+            var s = new KeySection { Id = id, Title = title, Role = role, Minigame = minigame, Note = note };
+            sections.Add(s);
+            return s;
         }
 
-        // Turns the saved names back into keys and fills the remap table with the ones that differ from the default.
-        // Enum.TryParse reads a name like "UpArrow" back into Key.UpArrow; a broken name falls back to the default.
+        // is_hidden = true: the entries don't get their own automatic rows in MOD CONFIGS; our page shows them instead.
+        // Returns the new row, so a caller can also set its OnPress.
+        private static Bind Add(MelonPreferences_Category cat, KeySection s, Key key, string what, GamepadButton pad)
+        {
+            var b = new Bind { Section = s, GameKey = key, What = what, DefaultPad = Controller.NameOf(pad) };
+            b.KeyEntry = cat.CreateEntry("Key_" + s.Id + "_" + key, key.ToString(), s.Title + ": key for " + what, null, true);
+            b.PadEntry = cat.CreateEntry("Pad_" + s.Id + "_" + key, b.DefaultPad, s.Title + ": controller button for " + what, null, true);
+            s.Binds.Add(b);
+            return b;
+        }
+
+        // The keyboard key chosen in a row. Enum.TryParse reads a name like "UpArrow" back into Key.UpArrow; a broken
+        // name falls back to the game key itself.
+        internal static Key Chosen(Bind b)
+        {
+            Key chosen;
+            if (!Enum.TryParse(b.KeyEntry.Value, out chosen) || chosen == Key.None)
+                chosen = b.GameKey;
+            return chosen;
+        }
+
+        // Works out what applies now: the role's section, then the minigame section on top (same key = minigame wins).
         private static void Rebuild()
         {
+            active.Clear();
             remap.Clear();
-            foreach (Bind b in binds)
+            actions.Clear();
+            PlayerRoles role = GameContext.Role;
+            if (role == PlayerRoles.None)
+                return;
+            foreach (KeySection s in sections)
+                if (s.Role == role && !s.Minigame)
+                    foreach (Bind b in s.Binds)
+                    {
+                        if (b.OnPress != null) actions.Add(b); // added keys never change the game's own key answers
+                        else active[b.GameKey] = b;
+                    }
+            if (GameContext.InMinigame)
+                foreach (KeySection s in sections)
+                    if (s.Role == role && s.Minigame)
+                        foreach (Bind b in s.Binds)
+                            active[b.GameKey] = b;
+            foreach (Bind b in active.Values)
             {
-                Key chosen;
-                if (!Enum.TryParse(b.Entry.Value, out chosen) || chosen == Key.None)
-                    chosen = b.GameKey;
-                if (chosen != b.GameKey)
-                    remap[b.GameKey] = chosen;
+                Key k = Chosen(b);
+                if (k != b.GameKey)
+                    remap[b.GameKey] = k;
             }
         }
 
-        private static Key Chosen(Bind b)
+        // The rows that apply right now (Controller.cs holds their keys while their buttons are held).
+        internal static ICollection<Bind> ActiveBinds { get { return active.Values; } }
+
+        // The added-key rows that apply right now (Purple Guy's screens); Tick and Controller.Tick run their OnPress.
+        private static readonly List<Bind> actions = new List<Bind>();
+        internal static List<Bind> ActiveActions { get { return actions; } }
+
+        // Runs an added key's action, unless the player is typing in a text box.
+        internal static void Press(Bind b)
         {
-            Key k;
-            return remap.TryGetValue(b.GameKey, out k) ? k : b.GameKey;
+            if (!GameContext.Typing())
+                b.OnPress();
         }
 
-        // The keyboard key the player chose for a game key (the game key itself when it wasn't moved).
-        internal static Key ChosenKey(Key gameKey)
+        private static void Save()
         {
-            Key k;
-            return remap.TryGetValue(gameKey, out k) ? k : gameKey;
-        }
-
-        private static void Save(Bind b, Key key)
-        {
-            b.Entry.Value = key.ToString();
             MelonPreferences.GetCategory(Category).SaveToFile(false); // false = no "saved" line in the log
             Rebuild();
         }
 
-        // RESET TO DEFAULTS on the Key Binds page: every key back to itself (never touches the save data).
+        internal static void SavePad(Bind b, string button)
+        {
+            b.PadEntry.Value = button;
+            Save();
+        }
+
+        // RESET TO DEFAULTS on the Key Binds page: every key and button back to its default (never touches the save).
         public static void ResetAll()
         {
             capturing = null;
-            foreach (Bind b in binds)
-                b.Entry.Value = b.GameKey.ToString();
-            Controller.ResetAll(); // the controller buttons and speed go back to their defaults too
-            MelonPreferences.GetCategory(Category).SaveToFile(false);
-            Rebuild();
+            foreach (KeySection s in sections)
+                foreach (Bind b in s.Binds)
+                {
+                    b.KeyEntry.Value = b.GameKey.ToString();
+                    b.PadEntry.Value = b.DefaultPad;
+                }
+            Controller.ResetAll(); // controller on/off and cursor speed back to their defaults too
+            Save();
         }
 
         // ================= the remapping (called from the Harmony patches) =================
 
-        // Answers a key question for the game. Returns false when the key wasn't moved (then the game's own answer
-        // is used). which: 0 = isPressed, 1 = wasPressedThisFrame, 2 = wasReleasedThisFrame.
+        // Answers a key question for the game. Returns false when the key wasn't moved in the current section (then
+        // the game's own answer is used). which: 0 = isPressed, 1 = wasPressedThisFrame, 2 = wasReleasedThisFrame.
         internal static bool TryAnswer(ButtonControl control, int which, out bool answer)
         {
             answer = false;
-            if (Bypass)
+            if (Bypass || remap.Count == 0)
                 return false;
             KeyControl key = control.TryCast<KeyControl>(); // TryCast = "is it really a key? then treat it as one"
             if (key == null)
@@ -167,25 +276,41 @@ namespace ModConfigs
             {
                 Bypass = false; // finally runs even after "return" or an error, so Bypass can't get stuck on
             }
-            // One log line per moved key per game session, the first time the game uses it (handy for bug reports).
-            if (logged.Add(gameKey))
-                MelonLogger.Msg("[ModConfigs] Key binds: the game asked for " + Pretty(gameKey) + ", answered with " + Pretty(to) + ".");
+            // One log line per moved key per section per game session, the first time the game uses it (for bug reports).
+            Bind b;
+            if (active.TryGetValue(gameKey, out b) && logged.Add(b.Section.Id + "_" + gameKey))
+                MelonLogger.Msg("[ModConfigs] Key binds (" + b.Section.Title + "): the game asked for " + Pretty(gameKey) + ", answered with " + Pretty(to) + ".");
             return true;
         }
 
-        private static readonly HashSet<Key> logged = new HashSet<Key>(); // keys already logged this session
+        private static readonly HashSet<string> logged = new HashSet<string>(); // section_key already logged
 
         // ================= "press a key..." =================
 
         // Called every frame by ModConfigsMod: while a row waits for a key, look at every key on the keyboard and take
-        // the first one pressed this frame. Esc cancels. (The click that started it is a mouse click, not a key, but
-        // the first frame is skipped anyway to be safe.)
+        // the first one pressed this frame. Esc cancels.
+        // Also runs the added keys (Purple Guy's screens) when their keyboard key goes down.
         public static void Tick()
         {
-            if (capturing == null || Time.unscaledTime - captureStarted < 0.1f)
-                return;
             Keyboard kb = Keyboard.current;
             if (kb == null)
+                return;
+            if (actions.Count > 0)
+            {
+                Bypass = true;
+                try
+                {
+                    foreach (Bind b in actions)
+                    {
+                        KeyControl c = kb[Chosen(b)];
+                        if (c != null && c.wasPressedThisFrame)
+                            Press(b);
+                    }
+                }
+                catch { }
+                finally { Bypass = false; }
+            }
+            if (capturing == null || Time.unscaledTime - captureStarted < 0.1f)
                 return;
             Bypass = true;
             try
@@ -201,7 +326,10 @@ namespace ModConfigs
                     Bind b = capturing;
                     capturing = null;
                     if (k != Key.Escape)
-                        Save(b, k);
+                    {
+                        b.KeyEntry.Value = k.ToString();
+                        Save();
+                    }
                     ConfigHub.Refresh();
                     return;
                 }
@@ -212,69 +340,99 @@ namespace ModConfigs
             }
         }
 
-        // ================= the page section =================
+        // ================= the page =================
 
-        // The whole built-in page: key binds first, the DANGER ZONE last (far from everything else, like on GitHub).
+        // The whole built-in page: the controller's general settings, the key binds per section, the DANGER ZONE last
+        // (far from everything else, like on GitHub).
         public static void BuildPage(ConfigPage page)
         {
-            BuildSection(page);
+            Controller.BuildSection(page);
             page.Space(20);
-            // The controller section gets the same game keys with what they do (Controller.cs).
-            var keys = new List<KeyValuePair<Key, string>>();
-            foreach (Bind b in binds)
-                keys.Add(new KeyValuePair<Key, string>(b.GameKey, b.What));
-            Controller.BuildSection(page, keys);
+            page.Header("Key binds");
+            page.Label("Each role has its own keys; they switch by themselves when your night starts. Click a key, then press the new "
+                + "key (Esc cancels). Click a controller button, then press the button on your controller (Start cancels, View / Share "
+                + "clears it). Purple = changed. RESET TO DEFAULTS puts everything back.", 18).color = UiKit.DimText;
+            foreach (KeySection s in sections)
+                BuildSection(page, s);
             page.Space(30);
             DangerZone.BuildSection(page);
         }
 
-        public static void BuildSection(ConfigPage page)
+        private static void BuildSection(ConfigPage page, KeySection s)
         {
-            page.Header("Key binds");
-            page.Label("Click a key, then press the new key for it (Esc cancels). RESET TO DEFAULTS puts every key back.", 18).color = UiKit.DimText;
-            foreach (Bind b in binds)
+            page.Space(10);
+            page.Label(s.Title, 26).color = s.Minigame ? UiKit.TextColor : UiKit.Purple;
+            if (s.Note != null)
+                page.Label(s.Note, 17).color = UiKit.DimText;
+            foreach (Bind b in s.Binds)
                 Row(page, b);
-            Warnings(page);
+            Warnings(page, s);
         }
 
-        // One row: the game key and what it does on the left, the chosen key as a button on the right.
+        // One row: the game key and what it does on the left; the keyboard key and the controller button on the right.
         private static void Row(ConfigPage page, Bind b)
         {
-            RectTransform row = page.Custom(78);
+            RectTransform row = page.Custom(70);
             UiKit.Box(row, UiKit.RowColor, true);
-            RectTransform left = UiKit.Element(row, "Label", new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0.5f), new Vector2(20, 0), new Vector2(-300, -10));
-            TextMeshProUGUI text = UiKit.Text(left, Pretty(b.GameKey) + "\n<size=15><color=#8c859e>" + b.What + "</color></size>", 24, UiKit.TextColor, TextAlignmentOptions.MidlineLeft);
+            RectTransform left = UiKit.Element(row, "Label", new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0.5f), new Vector2(20, 0), new Vector2(-500, -10));
+            string sub = b.OnPress != null ? "added by ModConfigs (the game has no key for this)" : "game key: " + Pretty(b.GameKey);
+            TextMeshProUGUI text = UiKit.Text(left, b.What + "\n<size=15><color=#8c859e>" + sub + "</color></size>", 22, UiKit.TextColor, TextAlignmentOptions.MidlineLeft);
             text.overflowMode = TextOverflowModes.Ellipsis;
-            RectTransform btn = UiKit.Element(row, "Key", new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(260, 56));
-            var click = new StartCapture(b);
-            TextMeshProUGUI label = UiKit.Button(btn, "", new Action(click.Click), false);
+
+            // Keyboard key button.
+            RectTransform kbtn = UiKit.Element(row, "Key", new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-250, 0), new Vector2(220, 52));
+            TextMeshProUGUI klabel = UiKit.Button(kbtn, "", new Action(new StartCapture(b).Click), false);
+            klabel.fontSize = 20;
             if (capturing == b)
             {
-                label.text = "PRESS A KEY...";
-                label.color = UiKit.Purple;
+                klabel.text = "PRESS A KEY...";
+                klabel.color = UiKit.Purple;
             }
             else
             {
                 Key chosen = Chosen(b);
-                label.text = Pretty(chosen);
-                label.color = chosen == b.GameKey ? UiKit.TextColor : UiKit.Purple; // purple = changed from default
+                klabel.text = Pretty(chosen);
+                klabel.color = chosen == b.GameKey ? UiKit.TextColor : UiKit.Purple; // purple = changed from default
             }
+
+            // Controller button (Controller.cs waits for the button).
+            RectTransform pbtn = UiKit.Element(row, "Pad", new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(230, 52));
+            bool waiting = Controller.IsCapturing(b);
+            TextMeshProUGUI plabel = UiKit.Button(pbtn, waiting ? "PRESS A BUTTON..." : Controller.Pretty(b.PadEntry.Value), new Action(new StartPadCapture(b).Click), false);
+            plabel.fontSize = 18;
+            plabel.color = waiting || b.PadEntry.Value != b.DefaultPad ? UiKit.Purple : UiKit.TextColor;
         }
 
-        // Warns about two game keys on the same key, and about keys that also open one of the game's menus.
-        private static void Warnings(ConfigPage page)
+        // Warns about two actions of one section on the same key or button, and about keys that also open a menu.
+        // (A minigame section also counts its role's rows that it doesn't replace, because those work at the same time.)
+        private static void Warnings(ConfigPage page, KeySection s)
         {
-            var used = new Dictionary<Key, string>();
-            foreach (Bind b in binds)
+            var rows = new List<Bind>(s.Binds);
+            if (s.Minigame)
+                foreach (KeySection r in sections)
+                    if (r.Role == s.Role && !r.Minigame)
+                        foreach (Bind b in r.Binds)
+                            if (s.Binds.Find(new Predicate<Bind>(new SameGameKey(b.GameKey).Matches)) == null)
+                                rows.Add(b);
+            var keys = new Dictionary<Key, string>();
+            var pads = new Dictionary<string, string>();
+            foreach (Bind b in rows)
             {
                 Key k = Chosen(b);
                 string other;
-                if (used.TryGetValue(k, out other))
-                    page.Label("Note: " + Pretty(b.GameKey) + " and " + other + " are both on " + Pretty(k) + ", so that key does both.", 18).color = UiKit.Purple;
+                if (keys.TryGetValue(k, out other))
+                    page.Label("Note: \"" + b.What + "\" and \"" + other + "\" are both on " + Pretty(k) + ", so that key does both.", 17).color = UiKit.Purple;
                 else
-                    used[k] = Pretty(b.GameKey);
+                    keys[k] = b.What;
+                if (b.PadEntry.Value != "None")
+                {
+                    if (pads.TryGetValue(b.PadEntry.Value, out other))
+                        page.Label("Note: \"" + b.What + "\" and \"" + other + "\" are both on " + Controller.Pretty(b.PadEntry.Value) + ".", 17).color = UiKit.Purple;
+                    else
+                        pads[b.PadEntry.Value] = b.What;
+                }
                 if (Array.IndexOf(MenuKeys, k) >= 0 && k != b.GameKey)
-                    page.Label("Note: " + Pretty(k) + " also opens one of the game's menus (Esc, Tab, N and ? can't be changed).", 18).color = UiKit.Purple;
+                    page.Label("Note: " + Pretty(k) + " also opens one of the game's menus (Esc, Tab, N and ? can't be changed).", 17).color = UiKit.Purple;
             }
         }
 
@@ -295,7 +453,14 @@ namespace ModConfigs
             return sb.ToString();
         }
 
-        // The button's click: start waiting for a key for this row (a named class instead of a lambda; see ConfigHub.cs).
+        // Small named classes instead of lambdas (see ConfigHub.cs for why).
+        private sealed class SameGameKey
+        {
+            private readonly Key key;
+            public SameGameKey(Key k) { key = k; }
+            public bool Matches(Bind b) { return b.GameKey == key; }
+        }
+
         private sealed class StartCapture
         {
             private readonly Bind bind;
@@ -306,6 +471,13 @@ namespace ModConfigs
                 captureStarted = Time.unscaledTime;
                 ConfigHub.Refresh();
             }
+        }
+
+        private sealed class StartPadCapture
+        {
+            private readonly Bind bind;
+            public StartPadCapture(Bind b) { bind = b; }
+            public void Click() { capturing = null; Controller.StartCapture(bind); }
         }
     }
 
