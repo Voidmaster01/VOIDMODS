@@ -9,8 +9,10 @@
 //     minigame. Only the rows of the role
 //     (and minigame) being played count, so outside a night the buttons press no game keys at all.
 //   - The mouse on the controller (cameras, buttons and Purple Guy need it): the left stick moves the cursor,
-//     A/Cross is a left click, the right stick scrolls.
-//   - Menu buttons: Start/Options = Esc (settings), View/Share = Tab (chat).
+//     A/Cross is a left click, the right stick scrolls. MENU CONTROL STYLE (Voidmaster01's idea): "Mouse (slippy)"
+//     moves the cursor freely; "Controller (sticky)" makes each push of the stick jump the cursor onto the next
+//     button on screen in that direction (see StickyMove).
+//   - Menu buttons: Start/Options = Esc (settings), View/Share = Tab (lobby chat).
 //   The settings are on ModConfigs' Key Binds page (CONTROLLER at the top, the buttons in each key bind row), saved in
 //   MelonPreferences (category KeyBinds).
 //
@@ -32,6 +34,8 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.LowLevel;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace ModConfigs
 {
@@ -41,6 +45,11 @@ namespace ModConfigs
 
         private static MelonPreferences_Entry<bool> enabled;
         private static MelonPreferences_Entry<float> cursorSpeed;
+        // Menu control style: "Mouse" = the left stick moves the cursor freely (slippy), "Sticky" = the left stick
+        // jumps the cursor from button to button on screen (Voidmaster01's idea). See StickyMove below.
+        private static MelonPreferences_Entry<string> menuStyle;
+        private static readonly string[] StyleNames = { "Mouse", "Sticky" };
+        private static readonly string[] StyleLabels = { "Mouse (slippy): cursor moves freely", "Controller (sticky): cursor jumps between buttons" };
         // (Each key bind row's controller button is saved with the row itself: Bind.PadEntry in KeyBinds.cs.)
 
         // Called by KeyBinds.Load, after the keyboard settings, so both live in the same category.
@@ -48,7 +57,10 @@ namespace ModConfigs
         {
             enabled = cat.CreateEntry("Pad_Enabled", true, "Controller support", null, true);
             cursorSpeed = cat.CreateEntry("Pad_CursorSpeed", 1.0f, "Cursor speed", null, true);
+            menuStyle = cat.CreateEntry("Pad_MenuStyle", "Mouse", "Menu control style (Mouse or Sticky)", null, true);
         }
+
+        private static bool Sticky { get { return menuStyle != null && menuStyle.Value == "Sticky"; } }
 
         public static bool Enabled { get { return enabled != null && enabled.Value; } }
 
@@ -64,6 +76,7 @@ namespace ModConfigs
         {
             enabled.Value = true;
             cursorSpeed.Value = 1.0f;
+            menuStyle.Value = "Mouse";
         }
 
         // ================= game keys: real key presses =================
@@ -238,7 +251,8 @@ namespace ModConfigs
                             KeyBinds.Press(row);
                     }
                 }
-                MoveCursor(pad);
+                if (Sticky) StickyMove(pad);
+                else MoveCursor(pad);
                 // Left click on A / Cross: press when the button goes down, release when it comes up.
                 bool south = pad.buttonSouth.isPressed;
                 if (south && !clickDown) { mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero); clickDown = true; }
@@ -305,12 +319,142 @@ namespace ModConfigs
             float dy = -s.y * speed * Time.unscaledDeltaTime; // stick up = screen up (screen y grows downward)
             int x = Clamp(p.X + (int)Math.Round(dx), topLeft.X, topLeft.X + w - 1);
             int y = Clamp(p.Y + (int)Math.Round(dy), topLeft.Y, topLeft.Y + h - 1);
+            PlaceCursor(x, y);
+        }
+
+        // Puts the real cursor at a Windows screen position, the way the game notices.
+        private static void PlaceCursor(int x, int y)
+        {
             SetCursorPos(x, y);
             // ABSOLUTE positions count 0..65535 across the whole desktop (all monitors, VIRTUALDESK), so convert.
             int vx = GetSystemMetrics(SM_XVIRTUALSCREEN), vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
             int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN), vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
             mouse_event(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
                 (int)((x - vx) * 65535L / Math.Max(1, vw - 1)), (int)((y - vy) * 65535L / Math.Max(1, vh - 1)), 0, UIntPtr.Zero);
+        }
+
+        // ================= sticky menu control (Pad_MenuStyle = "Sticky") =================
+        // Pushing the left stick jumps the cursor onto the nearest button in that direction, so A always lands on
+        // something clickable. Holding the stick repeats: the first repeat after 0.35 s, then every 0.15 s.
+        //
+        // HOW IT FINDS "THE NEXT BUTTON"
+        //   Unity keeps a list of every clickable UI element (Selectable.allSelectablesArray: buttons, toggles,
+        //   sliders, dropdowns, text boxes). For each one that is switched on and clickable we work out where its
+        //   middle is on screen (RectTransformUtility.WorldToScreenPoint, which also handles the game's 3D monitor
+        //   screens, whose UI sits in the 3D world). We keep the ones inside a 60 degree cone around the stick's
+        //   direction and score them by distance, with a penalty for being off to the side. Then, best score first,
+        //   we ask Unity's EventSystem what is really under that point (RaycastAll, the same test a mouse click
+        //   uses): only an element that would really get the click counts, so buttons hidden behind a panel are
+        //   skipped.
+
+        private static bool stickOut;   // was the stick pushed last frame?
+        private static float nextJump;  // when holding the stick may jump again
+
+        private static void StickyMove(Gamepad pad)
+        {
+            Vector2 s = pad.leftStick.ReadValue();
+            if (s.magnitude < 0.5f)
+            {
+                stickOut = false;
+                return;
+            }
+            float now = Time.unscaledTime;
+            if (stickOut && now < nextJump)
+                return;
+            nextJump = now + (stickOut ? 0.15f : 0.35f);
+            stickOut = true;
+            try { Jump(s.normalized); }
+            catch (Exception e) { MelonLogger.Warning("[ModConfigs] Sticky cursor: " + e.Message); }
+        }
+
+        private sealed class Candidate { public Selectable Item; public Vector2 Point; public float Score; }
+
+        private static int ByScore(Candidate a, Candidate b) { return a.Score.CompareTo(b.Score); }
+
+        private static void Jump(Vector2 dir)
+        {
+            IntPtr win = GetForegroundWindow();
+            RECT r;
+            POINT p;
+            if (!GetClientRect(win, out r) || !GetCursorPos(out p))
+                return;
+            POINT topLeft = new POINT();
+            ClientToScreen(win, ref topLeft);
+            int w = Math.Max(1, r.Right - r.Left), h = Math.Max(1, r.Bottom - r.Top);
+            // Unity measures from the BOTTOM-left of the game's own picture, Windows from the top-left of the screen,
+            // and the picture can be scaled (the game's resolution setting), hence sx / sy.
+            float sx = Screen.width / (float)w, sy = Screen.height / (float)h;
+            Vector2 cursor = new Vector2((p.X - topLeft.X) * sx, Screen.height - (p.Y - topLeft.Y) * sy);
+
+            var list = new List<Candidate>();
+            foreach (Selectable sel in Selectable.allSelectablesArray)
+            {
+                if (sel == null || !sel.isActiveAndEnabled || !sel.IsInteractable())
+                    continue;
+                Vector2 c;
+                if (!ScreenCenter(sel, out c) || c.x < 0 || c.y < 0 || c.x > Screen.width || c.y > Screen.height)
+                    continue;
+                Vector2 d = c - cursor;
+                float dist = d.magnitude;
+                if (dist < 8f)
+                    continue; // the one the cursor is already on
+                float cos = Vector2.Dot(d / dist, dir); // 1 = straight ahead, 0.5 = 60 degrees off
+                if (cos < 0.5f)
+                    continue;
+                list.Add(new Candidate { Item = sel, Point = c, Score = dist * (1f + 2f * (1f - cos)) });
+            }
+            list.Sort(new Comparison<Candidate>(ByScore));
+            for (int i = 0; i < list.Count && i < 12; i++)
+            {
+                if (!Clickable(list[i].Item, list[i].Point))
+                    continue;
+                PlaceCursor(topLeft.X + (int)Math.Round(list[i].Point.x / sx), topLeft.Y + (int)Math.Round((Screen.height - list[i].Point.y) / sy));
+                return;
+            }
+        }
+
+        // The middle of an element in Unity screen pixels. Overlay canvases are already in screen pixels (camera
+        // null); canvases drawn by a camera (the 3D monitors) need that camera to turn 3D into screen positions.
+        private static readonly Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppStructArray<Vector3> corners =
+            new Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppStructArray<Vector3>(4);
+
+        private static bool ScreenCenter(Selectable sel, out Vector2 point)
+        {
+            point = Vector2.zero;
+            RectTransform rt = sel.transform.TryCast<RectTransform>();
+            if (rt == null)
+                return false;
+            rt.GetWorldCorners(corners);
+            Vector3 mid = (corners[0] + corners[2]) * 0.5f; // halfway between bottom-left and top-right
+            Camera cam = null;
+            Canvas canvas = sel.GetComponentInParent<Canvas>();
+            if (canvas != null)
+            {
+                canvas = canvas.rootCanvas;
+                if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                {
+                    cam = canvas.worldCamera;
+                    if (cam == null) cam = Camera.main;
+                }
+            }
+            point = RectTransformUtility.WorldToScreenPoint(cam, mid);
+            return true;
+        }
+
+        // Would a click at this point really reach this element? (Nothing else on top of it.)
+        private static bool Clickable(Selectable sel, Vector2 point)
+        {
+            EventSystem es = EventSystem.current;
+            if (es == null)
+                return true; // can't tell: allow it
+            var data = new PointerEventData(es);
+            data.position = point;
+            var hits = new Il2CppSystem.Collections.Generic.List<RaycastResult>();
+            es.RaycastAll(data, hits);
+            if (hits.Count == 0)
+                return false;
+            GameObject top = hits[0].gameObject;
+            return top != null && (top == sel.gameObject || top.transform.IsChildOf(sel.transform));
         }
 
         private static int Clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -427,10 +571,14 @@ namespace ModConfigs
             page.Label(pad != null ? "Connected: " + pad.displayName : "No controller found. Plug one in (Xbox, PlayStation or any Windows controller) and reopen this page.", 18)
                 .color = pad != null ? UiKit.Purple : UiKit.DimText;
             page.Toggle("Controller support", new Func<bool>(GetEnabled), new Action<bool>(SetEnabled));
-            page.Slider("Cursor speed (left stick)", new Func<double>(GetSpeed), new Action<double>(SetSpeed), 0.3, 3.0, "0.0");
-            page.Label("Always: left stick = cursor, A / Cross = click, right stick = scroll, Start / Options = Esc, View / Share = Tab. "
-                + "The game's keys are on buttons per role, in the rows below.", 18).color = UiKit.DimText;
+            page.Choice("Menu control style", StyleLabels, new Func<int>(GetStyle), new Action<int>(SetStyle));
+            page.Slider("Cursor speed (left stick, Mouse style)", new Func<double>(GetSpeed), new Action<double>(SetSpeed), 0.3, 3.0, "0.0");
+            page.Label("Always: left stick = cursor (free, or jumping between buttons in Sticky style), A / Cross = click, right stick = scroll, "
+                + "Start / Options = Esc (settings), View / Share = Tab (lobby chat). The game's keys are on buttons per role, in the rows below.", 18).color = UiKit.DimText;
         }
+
+        private static int GetStyle() { return Sticky ? 1 : 0; }
+        private static void SetStyle(int i) { menuStyle.Value = StyleNames[Math.Max(0, Math.Min(1, i))]; Save(); }
 
         private static bool GetEnabled() { return enabled.Value; }
         private static void SetEnabled(bool v) { enabled.Value = v; Save(); }
