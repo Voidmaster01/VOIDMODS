@@ -207,6 +207,9 @@ namespace ModConfigs
             // Cameras / trackers / lures in reading order (Voidmaster01: LT / RT); see GameContext.StepItem.
             Add(cat, s, Key.Z, "Previous camera / button on screen (added)", GamepadButton.LeftTrigger).OnPress = new Action(GameContext.PreviousItem);
             Add(cat, s, Key.C, "Next camera / button on screen (added)", GamepadButton.RightTrigger).OnPress = new Action(GameContext.NextItem);
+            // Stepping never fires a lure or a tracker (lures only work twice, trackers shouldn't stay on): this key
+            // clicks the button the cursor is on. On a controller A / Cross is already that click, so no button here.
+            AddRow(cat, s, Key.F, "Use the selected button: lure, tracker (added)", "None").OnPress = new Action(Controller.ClickAtCursor);
         }
 
         // Number keys 1-9 (and the number pad) pick cameras while the Cameras tab is open; one switch for all roles.
@@ -235,7 +238,13 @@ namespace ModConfigs
         // Returns the new row, so a caller can also set its OnPress.
         private static Bind Add(MelonPreferences_Category cat, KeySection s, Key key, string what, GamepadButton pad)
         {
-            var b = new Bind { Section = s, GameKey = key, What = what, DefaultPad = Controller.NameOf(pad) };
+            return AddRow(cat, s, key, what, Controller.NameOf(pad));
+        }
+
+        // The same with the default controller button as a saved name; "None" = no controller button by default.
+        private static Bind AddRow(MelonPreferences_Category cat, KeySection s, Key key, string what, string defaultPad)
+        {
+            var b = new Bind { Section = s, GameKey = key, What = what, DefaultPad = defaultPad };
             b.KeyEntry = cat.CreateEntry("Key_" + s.Id + "_" + key, key.ToString(), s.Title + ": key for " + what, null, true);
             b.PadEntry = cat.CreateEntry("Pad_" + s.Id + "_" + key, b.DefaultPad, s.Title + ": controller button for " + what, null, true);
             s.Binds.Add(b);

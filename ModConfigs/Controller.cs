@@ -465,6 +465,16 @@ namespace ModConfigs
             PlaceCursor(topLeft.X + (int)Math.Round(point.x / sx), topLeft.Y + (int)Math.Round((Screen.height - point.y) / sy));
         }
 
+        // One real left click where the cursor is (the "use the selected button" key). A real click, so the game does
+        // exactly what a mouse click does there: its own limits apply (a lure's 2 uses, a tracker switching on/off).
+        internal static void ClickAtCursor()
+        {
+            if (!GameHasFocus() || clickDown)
+                return;
+            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+        }
+
         // Where the cursor is now, in Unity screen points (to find which item it is on). False when it can't tell.
         internal static bool CursorScreenPoint(out Vector2 point)
         {
