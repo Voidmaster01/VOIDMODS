@@ -8,6 +8,8 @@
 //     2. The countdown before it (ClearDataCountdown) is stopped on its first step, so no countdown shows.
 //     3. The "Hold "D" to clear Save Data" hint is hidden from the home screen.
 //   Step 1 alone already keeps the save safe; 2 and 3 only stop the game from showing things that do nothing now.
+//   The one deliberate way left to clear the save is GameSave.ClearAll (used by the DANGER ZONE, DangerZone.cs): it
+//   sets AllowOnce, which lets exactly one ClearData call through the block, and switches it off right after.
 //
 // HOW IT WORKS: HARMONY PATCHES
 //   Harmony (it comes with MelonLoader) can put our own small method in front of one of the game's methods: a
@@ -33,6 +35,12 @@ namespace ModConfigs
 {
     internal static class NoClearData
     {
+        // The home screen's menu (set when it starts), so GameSave.ClearAll can call its ClearData on purpose.
+        internal static MainMenuUI Menu;
+
+        // True only for the moment GameSave.ClearAll calls ClearData: then the block below lets that one call through.
+        internal static bool AllowOnce;
+
         // Called once from ModConfigsMod.OnInitializeMelon: finds the countdown's helper class and patches its
         // MoveNext with StopCountdown below. BindingFlags.NonPublic finds it even though the game hides it.
         public static void PatchCountdown(HarmonyLib.Harmony harmony)
@@ -90,6 +98,8 @@ namespace ModConfigs
     {
         private static bool Prefix()
         {
+            if (NoClearData.AllowOnce)
+                return true; // the DANGER ZONE asked for it on purpose (GameSave.ClearAll): let the game's method run
             MelonLogger.Msg("[ModConfigs] Blocked the game's 'clear save data' (hold D). Your save is untouched.");
             return false;
         }
@@ -101,6 +111,7 @@ namespace ModConfigs
     {
         private static void Postfix(MainMenuUI __instance)
         {
+            NoClearData.Menu = __instance; // remembered for GameSave.ClearAll
             try { NoClearData.HideHint(__instance); }
             catch (Exception e) { MelonLogger.Warning("[ModConfigs] Could not hide the clear-data hint: " + e.Message); }
         }

@@ -95,10 +95,18 @@ namespace ModConfigs
             GetModsHandler = open;
         }
 
-        // Rebuilds the page that is open right now (does nothing when the panel is closed).
+        // (1.1.0) Opens the MOD CONFIGS panel on the page called "name" (works only where the panel can open: the
+        // home screen). Used by the Mod Menu to jump straight to its own page.
+        public static void Show(string name)
+        {
+            HubPanel.OpenOn(name);
+        }
+
+        // Rebuilds the page that is open right now (does nothing when the panel is closed). Since 1.1.0 this happens
+        // on the next frame and keeps the scroll spot, so it is safe to call from a button click (see HubPanel.Later).
         public static void Refresh()
         {
-            HubPanel.RebuildCurrent();
+            HubPanel.RebuildKeepScroll();
         }
 
         // True while the MOD CONFIGS panel is open.

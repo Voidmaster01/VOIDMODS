@@ -790,7 +790,7 @@ namespace ModConfigs
             public void Click()
             {
                 Reload(group);
-                HubPanel.RebuildCurrent();
+                HubPanel.Later(false, false); // a button click: rebuild on the next frame (see HubPanel.Later)
             }
         }
     }

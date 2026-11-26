@@ -75,6 +75,15 @@ namespace ModConfigs
             }
         }
 
+        // Opens the panel with the page called "name" selected (ConfigHub.Show). The search box is not cleared, so
+        // a page hidden by the search still opens; it is just not highlighted in the list.
+        public static void OpenOn(string name)
+        {
+            selected = name;
+            ConfigPage.OpenRow = null;
+            Open();
+        }
+
         private static void Close()
         {
             FileConfigs.Flush();      // save config-file changes that are still waiting
@@ -294,23 +303,54 @@ namespace ModConfigs
             {
                 selected = name;
                 ConfigPage.OpenRow = null;
-                ShowList();
-                RebuildCurrent();
+                Later(true, false); // list + page, on the next frame
             }
         }
 
         // ================= the page =================
 
         // Empties the page area and lets the selected mod build its page again (so values are always current).
+        // This one rebuilds RIGHT NOW: only for code that is not running inside a click (like Open).
         public static void RebuildCurrent()
         {
             Rebuild(false);
         }
 
-        // The same, but stays at the same scroll spot (used when a dropdown or color picker folds open or shut).
+        // ---- rebuilding on the NEXT frame ----
+        // A click on a button runs inside Unity's own click handling. If that click rebuilt the page at once, it
+        // would destroy the very button Unity is still busy with, and Unity's UI ends up in a broken state (we saw
+        // every new button turn plain white). So clicks only ASK for a rebuild here, and Tick (called every frame by
+        // ModConfigsMod) does it on the next frame, when Unity has finished with the click.
+        private static bool laterPage, laterList, laterKeepScroll;
+
+        // list = also rebuild the mod list; keepScroll = stay at the same scroll spot on the page.
+        internal static void Later(bool list, bool keepScroll)
+        {
+            if (!laterPage)
+                laterKeepScroll = keepScroll;
+            else
+                laterKeepScroll &= keepScroll; // if any request wants the top, go to the top
+            laterPage = true;
+            laterList |= list;
+        }
+
+        // The same as Later(false, true): used when a dropdown or color picker folds open or shut, and by
+        // ConfigHub.Refresh, so the page stays where it was.
         internal static void RebuildKeepScroll()
         {
-            Rebuild(true);
+            Later(false, true);
+        }
+
+        // Called every frame: does a rebuild that was asked for.
+        internal static void Tick()
+        {
+            if (!laterPage)
+                return;
+            bool list = laterList, keep = laterKeepScroll;
+            laterPage = laterList = false;
+            if (list)
+                ShowList();
+            Rebuild(keep);
         }
 
         private static void Rebuild(bool keepScroll)
@@ -379,7 +419,7 @@ namespace ModConfigs
                 try { reset(); }
                 catch (Exception e) { MelonLogger.Warning("[ModConfigs] Reset failed: " + e); }
                 ConfigPage.OpenRow = null;
-                RebuildCurrent(); // also puts the button back to "RESET TO DEFAULTS"
+                Later(false, false); // next frame; also puts the button back to "RESET TO DEFAULTS"
             }
         }
 
@@ -437,7 +477,7 @@ namespace ModConfigs
             private void Reload()
             {
                 MelonPreferences.Load();
-                RebuildCurrent();
+                Later(false, false); // a button click: rebuild on the next frame
             }
         }
 
