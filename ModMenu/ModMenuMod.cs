@@ -3,7 +3,8 @@
 // WHAT IT DOES
 //   Adds a "Mod Menu" page to MOD CONFIGS and takes over ModConfigs' GET MODS button, which then opens this page
 //   instead of the Mod Menu's download page.
-//   The page has a shortcut to ModConfigs' built-in Key Binds page. The key binds and the DANGER ZONE themselves
+//   The page lists the INSTALLED MODS with an ON/OFF switch each (InstalledMods.cs: Mods <-> Mods\Disabled).
+//   It also has a shortcut to ModConfigs' built-in Key Binds page. The key binds and the DANGER ZONE themselves
 //   live in ModConfigs, so they work even without the Mod Menu (Voidmaster01's decision: settings belong in
 //   ModConfigs; the Mod Menu only adds a way to get there).
 //   (Coming next: browse and install approved mods, and update installed ones.)
@@ -52,6 +53,8 @@ namespace ModMenu
 
         private static void BuildPage(ConfigPage page)
         {
+            InstalledMods.BuildSection(page);
+            page.Space(20);
             page.Header("Get mods");
             page.Label("Browsing, installing and updating approved mods is coming in the next version.", 20).color = UiKit.DimText;
             page.Space(20);
