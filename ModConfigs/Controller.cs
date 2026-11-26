@@ -3,8 +3,10 @@
 //
 // WHAT IT DOES
 //   - Game keys on buttons: every key bind row (per role and per minigame, see KeyBinds.cs) also has a controller
-//     button. Role defaults: LB/L1 = A, RB/R1 = D, Y/Triangle = S, B/Circle = W, X/Square = Space; Midnight Motorist
-//     drives with the D-pad. All can be changed, separately for every role and minigame. Only the rows of the role
+//     button. Defaults (chosen by Voidmaster01): Security LB/RB doors, Y monitor; Parts & Service and Backstage
+//     D-pad left/right to look, Y laptop/shock, X door; Janitor X mask, Y monitor; Midnight Motorist drives with the
+//     D-pad; Freddy in Space flies with A; Purple Guy LB/RB screens. All can be changed, separately for every role and
+//     minigame. Only the rows of the role
 //     (and minigame) being played count, so outside a night the buttons press no game keys at all.
 //   - The mouse on the controller (cameras, buttons and Purple Guy need it): the left stick moves the cursor,
 //     A/Cross is a left click, the right stick scrolls.

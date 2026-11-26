@@ -114,10 +114,10 @@ namespace ModConfigs
             Add(cat, s, Key.S, "Flip monitor up/down", GamepadButton.North);
 
             s = Section("PartsService", "Parts & Service", PlayerRoles.PartsAndService, false, null);
-            Add(cat, s, Key.A, "Look left", GamepadButton.LeftShoulder);
-            Add(cat, s, Key.D, "Look right", GamepadButton.RightShoulder);
-            Add(cat, s, Key.Space, "Open/close laptop", GamepadButton.West);
-            Add(cat, s, Key.W, "Open/close door", GamepadButton.East);
+            Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
+            Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
+            Add(cat, s, Key.Space, "Open/close laptop", GamepadButton.North);
+            Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
 
             s = Section("Motorist", "Parts & Service: Midnight Motorist (minigame)", PlayerRoles.PartsAndService, true,
                 "While the laptop's Games tab is open. The arrow keys always drive too.");
@@ -127,18 +127,18 @@ namespace ModConfigs
             Add(cat, s, Key.D, "Drive right", GamepadButton.DpadRight);
 
             s = Section("Backstage", "Backstage", PlayerRoles.Backstage, false, null);
-            Add(cat, s, Key.A, "Look left", GamepadButton.LeftShoulder);
-            Add(cat, s, Key.D, "Look right", GamepadButton.RightShoulder);
+            Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
+            Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
             Add(cat, s, Key.S, "Shock", GamepadButton.North);
-            Add(cat, s, Key.W, "Open/close door", GamepadButton.East);
+            Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
 
             s = Section("Janitor", "Janitor's Closet", PlayerRoles.Janitor, false, null);
-            Add(cat, s, Key.A, "Open/close mask", GamepadButton.LeftShoulder);
-            Add(cat, s, Key.D, "Flip monitor up/down", GamepadButton.RightShoulder);
+            Add(cat, s, Key.A, "Open/close mask", GamepadButton.West);
+            Add(cat, s, Key.D, "Flip monitor up/down", GamepadButton.North);
 
             s = Section("FreddySpace", "Janitor: Freddy in Space (minigame)", PlayerRoles.Janitor, true,
                 "While the laptop's Games tab is open. Your mask and monitor keys keep working.");
-            Add(cat, s, Key.Space, "Fly (hold)", GamepadButton.West);
+            Add(cat, s, Key.Space, "Fly (hold)", GamepadButton.South);
 
             // Purple Guy has no keys in the game: his screens open only with the mouse on the bars at the screen edges.
             // These two keys are ADDED by ModConfigs (Voidmaster01's defaults: A/D and LB/RB); see GameContext.cs.
