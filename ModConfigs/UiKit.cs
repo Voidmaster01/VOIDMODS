@@ -142,6 +142,49 @@ namespace ModConfigs
             return img;
         }
 
+        // ---- Copying one of the game's own buttons (new in 1.1.0) ----
+
+        // The component types that only affect looks. Everything else on a copy (game scripts, click handlers,
+        // event triggers) is removed. A HashSet answers "is this name in the set?" quickly.
+        private static readonly System.Collections.Generic.HashSet<string> KeepTypes = new System.Collections.Generic.HashSet<string>
+        {
+            "Transform", "RectTransform", "CanvasRenderer", "Image", "RawImage", "Button", "TextMeshProUGUI",
+            "LayoutElement", "Outline", "Shadow", "Mask", "RectMask2D", "Animator", "CanvasGroup",
+            "HorizontalLayoutGroup", "VerticalLayoutGroup", "ContentSizeFitter",
+        };
+
+        // Removes every component that is not pure looks (see KeepTypes) from "go" and its children.
+        // DestroyImmediate removes it right now, so nothing of it runs even once. GetIl2CppType().Name is the
+        // game-side class name of a component.
+        public static void StripToLooks(GameObject go)
+        {
+            foreach (Component c in go.GetComponentsInChildren(Il2CppType.Of<Component>(), true))
+            {
+                if (c == null)
+                    continue;
+                if (!KeepTypes.Contains(c.GetIl2CppType().Name))
+                    UnityEngine.Object.DestroyImmediate(c);
+            }
+        }
+
+        // Makes a copy of one of the game's buttons that LOOKS the same but only does what onClick says.
+        // Instantiate copies the whole object with its children; StripToLooks removes the game's scripts; a new, empty
+        // ButtonClickedEvent drops the click targets set up in Unity's editor (those are copied too and would still run).
+        public static GameObject CopyLooks(GameObject original, Transform parent, string name, Action onClick)
+        {
+            GameObject copy = UnityEngine.Object.Instantiate(original, parent).TryCast<GameObject>();
+            copy.name = name;
+            StripToLooks(copy);
+            Button button = copy.GetComponent<Button>();
+            if (button != null)
+            {
+                button.onClick = new Button.ButtonClickedEvent();
+                if (onClick != null)
+                    button.onClick.AddListener(onClick);
+            }
+            return copy;
+        }
+
         // ---- Text boxes and sliders (new in 1.1.0) ----
 
         // Makes "target" a text box in the row style: click it, type, press Enter (or click elsewhere) and

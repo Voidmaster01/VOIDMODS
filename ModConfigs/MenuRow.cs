@@ -36,15 +36,6 @@ namespace ModConfigs
         private const string RowName = "ModConfigsRow";
         private static bool loggedLayout;
 
-        // The component types that only affect looks. Everything else on the copy (game scripts, click handlers,
-        // event triggers) is removed. A HashSet answers "is this name in the set?" quickly.
-        private static readonly HashSet<string> KeepTypes = new HashSet<string>
-        {
-            "Transform", "RectTransform", "CanvasRenderer", "Image", "RawImage", "Button", "TextMeshProUGUI",
-            "LayoutElement", "Outline", "Shadow", "Mask", "RectMask2D", "Animator", "CanvasGroup",
-            "HorizontalLayoutGroup", "VerticalLayoutGroup", "ContentSizeFitter",
-        };
-
         public static void Add(MainMenuUI menu)
         {
             // 1. Find the QUIT text in the home screen, and the button row it belongs to.
@@ -263,18 +254,11 @@ namespace ModConfigs
             return corners[1].y;
         }
 
-        // Removes every component that is not pure looks (see KeepTypes). DestroyImmediate removes it right now,
-        // so nothing of it runs even once. GetIl2CppType().Name is the game-side class name of a component.
+        // Removes every component that is not pure looks. Since 1.1.0 the work is done by UiKit.StripToLooks, so
+        // other mods (like the Mod Menu's MODS button) can copy game buttons the same safe way.
         private static void Strip(GameObject row)
         {
-            foreach (Component c in row.GetComponentsInChildren(Il2CppType.Of<Component>(), true))
-            {
-                if (c == null)
-                    continue;
-                string type = c.GetIl2CppType().Name;
-                if (!KeepTypes.Contains(type))
-                    UnityEngine.Object.DestroyImmediate(c);
-            }
+            UiKit.StripToLooks(row);
         }
 
         // The row's icon is the Image furthest to the left (the ">" arrow is furthest to the right, and the row's

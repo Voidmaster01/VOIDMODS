@@ -107,6 +107,7 @@ namespace ModConfigs
         public static void Refresh()
         {
             HubPanel.RebuildKeepScroll();
+            ModPanel.Refresh(); // a page shown in a ModPanel is rebuilt too (does nothing when it is closed)
         }
 
         // True while the MOD CONFIGS panel is open.
@@ -437,7 +438,7 @@ namespace ModConfigs
             public void Click()
             {
                 OpenRow = OpenRow == key ? null : key;
-                HubPanel.RebuildKeepScroll();
+                ConfigHub.Refresh(); // rebuilds MOD CONFIGS or a ModPanel, whichever shows this row
             }
         }
 
@@ -451,7 +452,7 @@ namespace ModConfigs
             {
                 set(index);
                 OpenRow = null;
-                HubPanel.RebuildKeepScroll();
+                ConfigHub.Refresh();
             }
         }
 

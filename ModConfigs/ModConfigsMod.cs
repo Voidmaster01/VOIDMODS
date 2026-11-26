@@ -26,6 +26,7 @@
 //   FileConfigs.cs: other mods' own config files              NoClearData.cs: turns off hold-D clear save data
 //   GameSave.cs: back up / clear the save on purpose          KeyBinds.cs + DangerZone.cs: the built-in Key Binds page
 //   Controller.cs: Xbox / PlayStation / other controllers (also on the Key Binds page)
+//   ModPanel.cs: a ready-made panel other mods can open (the Mod Menu's MODS panel)
 
 using MelonLoader;
 
@@ -56,6 +57,7 @@ namespace ModConfigs
         {
             MenuRow.Tick();
             HubPanel.Tick();   // rebuilds the panel page when a click asked for it (on the next frame, see HubPanel.Later)
+            ModPanel.Tick();   // the same for a ModPanel (like the Mod Menu's MODS panel)
             FileConfigs.Tick();
             KeyBinds.Tick();   // waits for a key while a key bind shows "PRESS A KEY..."
             Controller.Tick(); // controller: cursor, click, scroll, Esc/Tab, and "PRESS A BUTTON..."

@@ -60,6 +60,7 @@ namespace ModConfigs
         {
             try
             {
+                ModPanel.Close(); // one VOIDMODS panel at a time
                 if (root == null)
                     Build();
                 root.SetActive(true);
@@ -82,6 +83,13 @@ namespace ModConfigs
             selected = name;
             ConfigPage.OpenRow = null;
             Open();
+        }
+
+        // Closes MOD CONFIGS if it is open (ModPanel calls this: one VOIDMODS panel at a time).
+        internal static void CloseIfOpen()
+        {
+            if (IsOpen)
+                Close();
         }
 
         private static void Close()
