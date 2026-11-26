@@ -189,6 +189,13 @@ namespace ModConfigs
                 "They don't fire while you type in a text box.");
             Add(cat, s, Key.A, "Open/close left screen", GamepadButton.LeftShoulder).OnPress = new Action(GameContext.FlipPurpleLeft);
             Add(cat, s, Key.D, "Open/close right screen", GamepadButton.RightShoulder).OnPress = new Action(GameContext.FlipPurpleRight);
+            // His map (Voidmaster01: the nodes are very hard to point at): step through animatronics and the nodes the
+            // picked one can reach; see GameContext.StepPurple.
+            Add(cat, s, Key.Q, "Previous animatronic (picks it)", GamepadButton.DpadLeft).OnPress = new Action(GameContext.PreviousAnimatronic);
+            Add(cat, s, Key.E, "Next animatronic (picks it)", GamepadButton.DpadRight).OnPress = new Action(GameContext.NextAnimatronic);
+            Add(cat, s, Key.Z, "Previous node it can go to", GamepadButton.LeftTrigger).OnPress = new Action(GameContext.PreviousNode);
+            Add(cat, s, Key.C, "Next node it can go to", GamepadButton.RightTrigger).OnPress = new Action(GameContext.NextNode);
+            AddRow(cat, s, Key.F, "Send it to the selected node", "None").OnPress = new Action(Controller.ClickAtCursor);
 
             cameraNumbers = cat.CreateEntry("Cam_NumberKeys", true, "Number keys pick cameras", null, true);
             Controller.Load(cat); // the controller's general settings live in the same category (Controller.cs)

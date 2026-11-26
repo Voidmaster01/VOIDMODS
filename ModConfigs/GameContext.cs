@@ -311,6 +311,97 @@ namespace ModConfigs
                 items.Add(new Item { Thing = c, Point = p });
         }
 
+        // ================= Purple Guy's map: animatronics and nodes (keys the game doesn't have) =================
+        // Purple Guy picks an animatronic, then a purple node to send it to; the nodes are small and close together,
+        // so pointing at them with a stick is hard (Voidmaster01). These keys step through them instead:
+        //   animatronics: the ones he can control (canBeControlled), in reading order; stepping PICKS one, exactly
+        //                 like clicking it (its own OnSelect), and puts the cursor on it.
+        //   nodes:        only where the picked animatronic may go (its viableNodesToGoTo, plus viableNodesToTarget:
+        //                 Foxy and Golden Freddy can only go to the players), in reading order; stepping only MOVES THE
+        //                 CURSOR, because a move costs energy: A (or the "use" key) confirms it with a click.
+        // Found in the game's code: PurpleGuyNodeManager (selectedAnimatronic, Animatronics), PurpleGuyAnimatronic,
+        // PurpleGuyNode.
+
+        private static PurpleGuyNodeManager purpleMap;
+
+        private static PurpleGuyNodeManager PurpleMap()
+        {
+            if (purpleMap == null)
+                purpleMap = UnityEngine.Object.FindObjectOfType<PurpleGuyNodeManager>();
+            return purpleMap;
+        }
+
+        public static void NextAnimatronic() { StepPurple(true, 1); }
+        public static void PreviousAnimatronic() { StepPurple(true, -1); }
+        public static void NextNode() { StepPurple(false, 1); }
+        public static void PreviousNode() { StepPurple(false, -1); }
+
+        private static void StepPurple(bool animatronics, int dir)
+        {
+            if (Role != PlayerRoles.PurpleGuy || PurpleMap() == null)
+                return;
+            try
+            {
+                var items = new List<Item>();
+                int current = -1;
+                PurpleGuyAnimatronic picked = purpleMap.selectedAnimatronic;
+                if (animatronics)
+                {
+                    // A plain for loop with Count / [i]: the game's lists are Il2Cpp lists, read one item at a time.
+                    for (int i = 0; i < purpleMap.Animatronics.Count; i++)
+                    {
+                        PurpleGuyAnimatronic a = purpleMap.Animatronics[i];
+                        if (a != null && a.canBeControlled)
+                            AddItem(items, a);
+                    }
+                    items.Sort(new Comparison<Item>(ReadingOrder));
+                    if (picked != null)
+                        for (int i = 0; i < items.Count; i++)
+                            if (items[i].Thing.Cast<PurpleGuyAnimatronic>() == picked) { current = i; break; }
+                }
+                else
+                {
+                    if (picked == null)
+                        return; // pick an animatronic first
+                    AddNodes(items, picked.viableNodesToGoTo);
+                    AddNodes(items, picked.viableNodesToTarget);
+                    items.Sort(new Comparison<Item>(ReadingOrder));
+                    Vector2 cursor;
+                    if (Controller.CursorScreenPoint(out cursor))
+                        for (int i = 0; i < items.Count; i++)
+                            if ((items[i].Point - cursor).magnitude < 40f) { current = i; break; }
+                }
+                if (items.Count == 0)
+                    return;
+                int next = current < 0 ? (dir > 0 ? 0 : items.Count - 1) : (current + dir + items.Count) % items.Count;
+                if (animatronics)
+                    items[next].Thing.Cast<PurpleGuyAnimatronic>().OnSelect(); // picks it, like a click
+                Controller.CursorToScreenPoint(items[next].Point);
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Warning("[ModConfigs] Purple Guy map keys: " + e.Message);
+            }
+        }
+
+        // Adds the switched-on nodes of a node list (skipping ones already in the list).
+        private static void AddNodes(List<Item> items, Il2CppSystem.Collections.Generic.List<PurpleGuyNode> nodes)
+        {
+            if (nodes == null)
+                return;
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                PurpleGuyNode n = nodes[i];
+                if (n == null)
+                    continue;
+                bool already = false;
+                foreach (Item it in items)
+                    if (it.Thing.Cast<PurpleGuyNode>() == n) { already = true; break; }
+                if (!already)
+                    AddItem(items, n);
+            }
+        }
+
         // Number keys 1-9 (top row or number pad) pick that camera while the Cameras tab is open (Voidmaster01: "cameras
         // usually use the numpad / number keys"). Security's keypad also listens to digits for its security codes, so
         // while a code is being asked for (KeypadSystem.isCalling) the digits are left to the keypad alone.
