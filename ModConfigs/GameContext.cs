@@ -66,12 +66,24 @@ namespace ModConfigs
             bool minigame = false;
             string state = "down";
             PlayerComputer pc = null;
+            // The match's role manager. The Harmony patches below were meant to catch it starting, but tests showed
+            // they never fire (no role was ever detected), so while there is none we also look for it in the scene,
+            // once a second (FindObjectOfType searches every object, so not every frame).
             // "manager == null" is also true once Unity destroyed it (the match ended), see UnityEngine.Object.
+            if (manager == null && Time.unscaledTime >= nextSearch)
+            {
+                nextSearch = Time.unscaledTime + 1f;
+                manager = UnityEngine.Object.FindObjectOfType<PlayerRoleManager>();
+            }
             if (manager != null)
             {
                 try
                 {
-                    if (manager.IsLocalPlayerAlive())
+                    // Purple Guy first: he is not a crew member, so the game's "is the local player alive" check
+                    // (made for the crew) doesn't apply to him.
+                    if (manager.IsRole(PlayerRoles.PurpleGuy))
+                        role = PlayerRoles.PurpleGuy;
+                    else if (manager.IsLocalPlayerAlive())
                     {
                         foreach (PlayerRoles r in Roles)
                             if (manager.IsRole(r)) { role = r; break; }
@@ -119,6 +131,7 @@ namespace ModConfigs
         }
 
         private static bool warned;
+        private static float nextSearch; // when to look for the role manager again
 
         private static string BackstageState(BackstageCameraController_View view)
         {
@@ -139,12 +152,20 @@ namespace ModConfigs
         private static PurpleGuyUI purpleUi;
         internal static void SetPurpleUi(PurpleGuyUI ui) { purpleUi = ui; }
 
+        // Purple Guy's screen UI: remembered by the patch below, or (if that missed it) looked up in the scene.
+        private static PurpleGuyUI PurpleUi()
+        {
+            if (purpleUi == null)
+                purpleUi = UnityEngine.Object.FindObjectOfType<PurpleGuyUI>();
+            return purpleUi;
+        }
+
         public static void FlipPurpleLeft() { FlipPurple(0); }
         public static void FlipPurpleRight() { FlipPurple(1); }
 
         private static void FlipPurple(int monitor)
         {
-            if (Role != PlayerRoles.PurpleGuy || purpleUi == null)
+            if (Role != PlayerRoles.PurpleGuy || PurpleUi() == null)
                 return;
             try
             {
@@ -330,7 +351,7 @@ namespace ModConfigs
         // screen goes down (the same functions as his A / D keys).
         public static bool LowerMonitorForEscape()
         {
-            if (Role == PlayerRoles.PurpleGuy && purpleUi != null)
+            if (Role == PlayerRoles.PurpleGuy && PurpleUi() != null)
             {
                 if (purpleUi.isMonitorUp) { purpleUi.MonitorFlip0(); return true; }
                 if (purpleUi.isMonitor1Up) { purpleUi.MonitorFlip1(); return true; }

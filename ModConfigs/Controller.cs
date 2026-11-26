@@ -623,7 +623,11 @@ namespace ModConfigs
                 canvas = canvas.rootCanvas;
                 if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
                 {
-                    cam = canvas.worldCamera;
+                    // The camera that the game's own click detection (the canvas' GraphicRaycaster) uses for this
+                    // canvas, so our positions match what a mouse click hits, also on 3D screens like Purple Guy's map.
+                    GraphicRaycaster gr = canvas.GetComponent<GraphicRaycaster>();
+                    cam = gr != null ? gr.eventCamera : null;
+                    if (cam == null) cam = canvas.worldCamera;
                     if (cam == null) cam = Camera.main;
                 }
             }
