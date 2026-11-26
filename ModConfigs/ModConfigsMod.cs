@@ -28,6 +28,7 @@
 //   GameSave.cs: back up / clear the save on purpose          KeyBinds.cs + DangerZone.cs: the built-in Key Binds page
 //   Controller.cs: Xbox / PlayStation / other controllers (also on the Key Binds page)
 //   GameContext.cs: which role / minigame is being played, so key binds can differ per role
+//   EscapeKey.cs: Esc / Start goes back (closes a panel, puts the monitor down) before opening Settings
 //   ModPanel.cs: a ready-made panel other mods can open (the Mod Menu's MODS panel)
 
 using MelonLoader;
@@ -65,6 +66,7 @@ namespace ModConfigs
             KeyBinds.Tick();   // waits for a key while a key bind shows "PRESS A KEY..."
             Controller.Tick(); // controller: cursor, click, scroll, Esc/Tab, and "PRESS A BUTTON..."
             DangerZone.Tick(); // the DANGER ZONE button's countdown
+            EscapeKey.Tick();  // Esc / Start: close a panel or put the monitor down instead of opening Settings
         }
 
         // When the game closes: save config-file changes that are still waiting, so nothing is lost.

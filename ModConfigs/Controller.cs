@@ -526,6 +526,7 @@ namespace ModConfigs
         // ================= "press a button..." =================
 
         internal static bool IsCapturing(Bind b) { return captureBind == b; }
+        internal static bool Capturing { get { return captureBind != null; } }
 
         // Called by a key bind row's controller button (KeyBinds.cs).
         internal static void StartCapture(Bind row)

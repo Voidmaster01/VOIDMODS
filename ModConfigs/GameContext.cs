@@ -325,6 +325,25 @@ namespace ModConfigs
             }
         }
 
+        // Esc / Start: puts the monitor or laptop down if it is up (EscapeKey.cs). True when it did something.
+        // Backstage's screen is always on (isMonitorAlwaysUp), so it is left alone. Purple Guy: his open left or right
+        // screen goes down (the same functions as his A / D keys).
+        public static bool LowerMonitorForEscape()
+        {
+            if (Role == PlayerRoles.PurpleGuy && purpleUi != null)
+            {
+                if (purpleUi.isMonitorUp) { purpleUi.MonitorFlip0(); return true; }
+                if (purpleUi.isMonitor1Up) { purpleUi.MonitorFlip1(); return true; }
+                return false;
+            }
+            if (Role == PlayerRoles.None || computer == null || computer.isMonitorAlwaysUp)
+                return false;
+            if (!computer.isMonitorUp.Value)
+                return false;
+            computer.ToggleMonitorFlip(); // the game's own up/down switch, so its animation and rules apply
+            return true;
+        }
+
         // True while the player types in a text box (Purple Guy's Wordle "input guesses by text", the chat...), so
         // keys that ModConfigs ADDS (like Purple Guy's A/D) don't fire while typing letters.
         public static bool Typing()

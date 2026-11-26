@@ -99,6 +99,14 @@ namespace ModConfigs
 
         private static Bind capturing;         // the row waiting for "press a key...", or null
         private static float captureStarted;   // when it started (Time.unscaledTime), to ignore that same frame
+        private static float captureEnded = -10f; // when the last "press a key..." ended
+
+        // True while a row waits for a key or a button, or did a moment ago (Esc that cancels it must not also close
+        // the panel; see EscapeKey.cs).
+        internal static bool RecentlyCapturing
+        {
+            get { return capturing != null || Controller.Capturing || UnityEngine.Time.unscaledTime - captureEnded < 0.3f; }
+        }
 
         // Unity's reserved menu keys in this game (read through the old input system): binding a game key to one of
         // these still works, but the key keeps opening its menu too, so the page warns about it.
@@ -416,6 +424,7 @@ namespace ModConfigs
                         continue;
                     Bind b = capturing;
                     capturing = null;
+                    captureEnded = Time.unscaledTime;
                     if (k != Key.Escape)
                     {
                         b.KeyEntry.Value = k.ToString();
