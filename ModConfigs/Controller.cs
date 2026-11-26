@@ -420,14 +420,21 @@ namespace ModConfigs
 
         private static bool ScreenCenter(Selectable sel, out Vector2 point)
         {
+            return ScreenPoint(sel.transform, out point);
+        }
+
+        // The middle of any UI element (anything with a RectTransform) in Unity screen pixels. Also used by
+        // GameContext to sort the camera / tracker / lure buttons in reading order.
+        internal static bool ScreenPoint(Transform t, out Vector2 point)
+        {
             point = Vector2.zero;
-            RectTransform rt = sel.transform.TryCast<RectTransform>();
+            RectTransform rt = t != null ? t.TryCast<RectTransform>() : null;
             if (rt == null)
                 return false;
             rt.GetWorldCorners(corners);
             Vector3 mid = (corners[0] + corners[2]) * 0.5f; // halfway between bottom-left and top-right
             Camera cam = null;
-            Canvas canvas = sel.GetComponentInParent<Canvas>();
+            Canvas canvas = t.GetComponentInParent<Canvas>();
             if (canvas != null)
             {
                 canvas = canvas.rootCanvas;
@@ -438,6 +445,39 @@ namespace ModConfigs
                 }
             }
             point = RectTransformUtility.WorldToScreenPoint(cam, mid);
+            return true;
+        }
+
+        // Puts the real cursor on a Unity screen point (bottom-left origin, the game's own pixels) inside the game
+        // window. Used by the "next item on screen" keys (GameContext.Item). Only while the game is in front.
+        internal static void CursorToScreenPoint(Vector2 point)
+        {
+            if (!GameHasFocus())
+                return;
+            IntPtr win = GetForegroundWindow();
+            RECT r;
+            if (!GetClientRect(win, out r))
+                return;
+            POINT topLeft = new POINT();
+            ClientToScreen(win, ref topLeft);
+            int w = Math.Max(1, r.Right - r.Left), h = Math.Max(1, r.Bottom - r.Top);
+            float sx = Screen.width / (float)w, sy = Screen.height / (float)h;
+            PlaceCursor(topLeft.X + (int)Math.Round(point.x / sx), topLeft.Y + (int)Math.Round((Screen.height - point.y) / sy));
+        }
+
+        // Where the cursor is now, in Unity screen points (to find which item it is on). False when it can't tell.
+        internal static bool CursorScreenPoint(out Vector2 point)
+        {
+            point = Vector2.zero;
+            IntPtr win = GetForegroundWindow();
+            RECT r;
+            POINT p;
+            if (!GameHasFocus() || !GetClientRect(win, out r) || !GetCursorPos(out p))
+                return false;
+            POINT topLeft = new POINT();
+            ClientToScreen(win, ref topLeft);
+            int w = Math.Max(1, r.Right - r.Left), h = Math.Max(1, r.Bottom - r.Top);
+            point = new Vector2((p.X - topLeft.X) * Screen.width / (float)w, Screen.height - (p.Y - topLeft.Y) * Screen.height / (float)h);
             return true;
         }
 

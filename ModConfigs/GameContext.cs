@@ -24,6 +24,7 @@
 //   saved here.
 
 using System;
+using System.Collections.Generic;
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
@@ -175,6 +176,115 @@ namespace ModConfigs
             catch (Exception e)
             {
                 MelonLogger.Warning("[ModConfigs] Couldn't change the laptop tab: " + e.Message);
+            }
+        }
+
+        // ================= items on the current screen: cameras, trackers, lures (keys the game doesn't have) ========
+        // Voidmaster01: LT / RT go through the buttons of the open tab "top to bottom, left to right, from the top-left
+        // one to the bottom-right one". The buttons are found by their kind (the game's own components):
+        //   Cameras          CameraSelectionButton (One..Nine): stepping SWITCHES the camera (its own Select()).
+        //   Motion Detection TrackerButton, Audio Lure LureButton: stepping only MOVES THE CURSOR onto the button and
+        //                    A (or a click) uses it, because using them costs power / lure uses.
+        // Reading order: higher on screen first; buttons at about the same height (within 4% of the screen) count as
+        // one row and go left to right. "Which one am I on" = the button nearest the cursor (within 40 pixels).
+
+        private sealed class Item { public Component Thing; public Vector2 Point; }
+
+        private static int ReadingOrder(Item a, Item b)
+        {
+            float row = Screen.height * 0.04f;
+            if (Math.Abs(a.Point.y - b.Point.y) > row)
+                return b.Point.y.CompareTo(a.Point.y); // Unity's y grows upward: bigger y = higher = first
+            return a.Point.x.CompareTo(b.Point.x);
+        }
+
+        public static void NextItem() { StepItem(1); }
+        public static void PreviousItem() { StepItem(-1); }
+
+        private static void StepItem(int dir)
+        {
+            if (!MonitorUp || computer == null)
+                return;
+            try
+            {
+                ComputerScreen screen = computer.currentComputerScreen.Value;
+                var items = new List<Item>();
+                if (screen == ComputerScreen.Cameras && computer.playerCameraSystem != null)
+                {
+                    foreach (CameraSelectionButton b in computer.playerCameraSystem.GetComponentsInChildren<CameraSelectionButton>(false))
+                        AddItem(items, b);
+                }
+                else if (screen == ComputerScreen.MotionDetection && computer.playerMotionDetectionSystem != null)
+                {
+                    foreach (TrackerButton b in computer.playerMotionDetectionSystem.GetComponentsInChildren<TrackerButton>(false))
+                        AddItem(items, b);
+                }
+                else if (screen == ComputerScreen.AudioLure && computer.playerAudioLureSystem != null)
+                {
+                    foreach (LureButton b in computer.playerAudioLureSystem.GetComponentsInChildren<LureButton>(false))
+                        AddItem(items, b);
+                }
+                if (items.Count == 0)
+                    return;
+                items.Sort(new Comparison<Item>(ReadingOrder));
+                // Which item is the cursor on? -1 = none: then RT starts at the first, LT at the last.
+                int current = -1;
+                Vector2 cursor;
+                if (Controller.CursorScreenPoint(out cursor))
+                    for (int i = 0; i < items.Count; i++)
+                        if ((items[i].Point - cursor).magnitude < 40f) { current = i; break; }
+                if (current < 0 && screen == ComputerScreen.Cameras)
+                    for (int i = 0; i < items.Count; i++) // or the camera being watched
+                        if (computer.playerCameraSystem.IsWatchingCamera(items[i].Thing.Cast<CameraSelectionButton>().targetCameraName)) { current = i; break; }
+                int next = current < 0 ? (dir > 0 ? 0 : items.Count - 1) : (current + dir + items.Count) % items.Count; // % wraps around
+                Item pick = items[next];
+                if (screen == ComputerScreen.Cameras)
+                    pick.Thing.Cast<CameraSelectionButton>().Select();
+                Controller.CursorToScreenPoint(pick.Point);
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Warning("[ModConfigs] Couldn't step to the next item: " + e.Message);
+            }
+        }
+
+        private static void AddItem(List<Item> items, Component c)
+        {
+            Vector2 p;
+            if (c != null && c.gameObject.activeInHierarchy && Controller.ScreenPoint(c.transform, out p))
+                items.Add(new Item { Thing = c, Point = p });
+        }
+
+        // Number keys 1-9 (top row or number pad) pick that camera while the Cameras tab is open (Voidmaster01: "cameras
+        // usually use the numpad / number keys"). Security's keypad also listens to digits for its security codes, so
+        // while a code is being asked for (KeypadSystem.isCalling) the digits are left to the keypad alone.
+        private static KeypadSystem keypad;
+
+        public static void SelectCameraNumber(int n)
+        {
+            if (!MonitorUp || computer == null || computer.playerCameraSystem == null)
+                return;
+            try
+            {
+                if (computer.currentComputerScreen.Value != ComputerScreen.Cameras)
+                    return;
+                if (Role == PlayerRoles.SecurityOffice)
+                {
+                    if (keypad == null) keypad = UnityEngine.Object.FindObjectOfType<KeypadSystem>();
+                    if (keypad != null && keypad.isCalling.Value)
+                        return;
+                }
+                CameraName want = (CameraName)(n - 1); // One = 0, Two = 1, ... (the enum's own order)
+                foreach (CameraSelectionButton b in computer.playerCameraSystem.GetComponentsInChildren<CameraSelectionButton>(false))
+                    if (b.targetCameraName == want)
+                    {
+                        b.Select();
+                        return;
+                    }
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Warning("[ModConfigs] Couldn't pick camera " + n + ": " + e.Message);
             }
         }
 

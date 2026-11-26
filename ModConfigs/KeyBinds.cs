@@ -182,6 +182,7 @@ namespace ModConfigs
             Add(cat, s, Key.A, "Open/close left screen", GamepadButton.LeftShoulder).OnPress = new Action(GameContext.FlipPurpleLeft);
             Add(cat, s, Key.D, "Open/close right screen", GamepadButton.RightShoulder).OnPress = new Action(GameContext.FlipPurpleRight);
 
+            cameraNumbers = cat.CreateEntry("Cam_NumberKeys", true, "Number keys pick cameras", null, true);
             Controller.Load(cat); // the controller's general settings live in the same category (Controller.cs)
             GameContext.Changed += Rebuild; // "+=" subscribes: Rebuild runs every time the role or minigame changes
             Rebuild();
@@ -203,6 +204,31 @@ namespace ModConfigs
         {
             Add(cat, s, Key.Q, "Previous tab (added by ModConfigs)", prev).OnPress = new Action(GameContext.PreviousTab);
             Add(cat, s, Key.E, "Next tab (added by ModConfigs)", next).OnPress = new Action(GameContext.NextTab);
+            // Cameras / trackers / lures in reading order (Voidmaster01: LT / RT); see GameContext.StepItem.
+            Add(cat, s, Key.Z, "Previous camera / button on screen (added)", GamepadButton.LeftTrigger).OnPress = new Action(GameContext.PreviousItem);
+            Add(cat, s, Key.C, "Next camera / button on screen (added)", GamepadButton.RightTrigger).OnPress = new Action(GameContext.NextItem);
+        }
+
+        // Number keys 1-9 (and the number pad) pick cameras while the Cameras tab is open; one switch for all roles.
+        private static MelonPreferences_Entry<bool> cameraNumbers;
+        private static bool GetCameraNumbers() { return cameraNumbers.Value; }
+        private static void SetCameraNumbers(bool v) { cameraNumbers.Value = v; Save(); }
+
+        // Called from Tick: a digit pressed this frame picks that camera (GameContext checks the tab and the keypad).
+        private static void CheckCameraNumbers(Keyboard kb)
+        {
+            if (!cameraNumbers.Value || !GameContext.MonitorUp || GameContext.Typing())
+                return;
+            for (int n = 1; n <= 9; n++)
+            {
+                KeyControl top = kb[(Key)((int)Key.Digit1 + n - 1)];   // Digit1..Digit9 follow each other in the Key list
+                KeyControl pad = kb[(Key)((int)Key.Numpad1 + n - 1)];  // so do Numpad1..Numpad9
+                if ((top != null && top.wasPressedThisFrame) || (pad != null && pad.wasPressedThisFrame))
+                {
+                    GameContext.SelectCameraNumber(n);
+                    return;
+                }
+            }
         }
 
         // is_hidden = true: the entries don't get their own automatic rows in MOD CONFIGS; our page shows them instead.
@@ -293,7 +319,8 @@ namespace ModConfigs
                     b.KeyEntry.Value = b.GameKey.ToString();
                     b.PadEntry.Value = b.DefaultPad;
                 }
-            Controller.ResetAll(); // controller on/off and cursor speed back to their defaults too
+            cameraNumbers.Value = true;
+            Controller.ResetAll(); // controller on/off, cursor speed and menu style back to their defaults too
             Save();
         }
 
@@ -354,6 +381,7 @@ namespace ModConfigs
                         if (c != null && c.wasPressedThisFrame)
                             Press(b);
                     }
+                    CheckCameraNumbers(kb);
                 }
                 catch { }
                 finally { Bypass = false; }
@@ -400,6 +428,7 @@ namespace ModConfigs
             page.Label("Each role has its own keys; they switch by themselves when your night starts. Click a key, then press the new "
                 + "key (Esc cancels). Click a controller button, then press the button on your controller (Start cancels, View / Share "
                 + "clears it). Purple = changed. RESET TO DEFAULTS puts everything back.", 18).color = UiKit.DimText;
+            page.Toggle("Number keys 1-9 / number pad pick cameras (while the Cameras tab is open)", new Func<bool>(GetCameraNumbers), new Action<bool>(SetCameraNumbers));
             foreach (KeySection s in sections)
                 BuildSection(page, s);
             page.Space(30);
