@@ -778,7 +778,9 @@ namespace ModConfigs
             public ShowFile(string p) { path = p; }
             public void Click()
             {
-                try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\""); }
+                // Opens the file's folder in Explorer through Unity (OpenURL with a file:/// link). Earlier versions started
+                // explorer.exe directly; antivirus programs distrust mods that start other programs.
+                try { Application.OpenURL(new Uri(Path.GetDirectoryName(path) + Path.DirectorySeparatorChar).AbsoluteUri); }
                 catch (Exception e) { MelonLogger.Warning("[ModConfigs] Can't open Explorer: " + e.Message); }
             }
         }

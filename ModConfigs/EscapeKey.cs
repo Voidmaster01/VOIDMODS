@@ -1,5 +1,5 @@
-// EscapeKey.cs - part of ModConfigs (new in 1.1.0): makes Esc (and the controller's Start / Options button, which
-// presses Esc) "go back" instead of opening the game's Settings when there is something to go back from
+// EscapeKey.cs - part of ModConfigs (new in 1.1.0): makes Esc (and the controller's Start / Options button, see
+// StartButton) "go back" instead of opening the game's Settings when there is something to go back from
 // (Voidmaster01's request).
 //
 // WHAT IT DOES
@@ -32,6 +32,27 @@ namespace ModConfigs
     internal static class EscapeKey
     {
         private static int hideSettingsFrames; // how many more frames to close the game's Settings
+
+        // The controller's Start / Options button (Controller.cs). It can't press a real Esc (the game reads Esc through
+        // Unity's old input system), so it does what Esc does itself: go back one step, or else open / close Settings
+        // with the Settings window's own Show / Hide.
+        public static void StartButton()
+        {
+            try
+            {
+                if (WentBack())
+                    return;
+                SettingsUI s = UnityEngine.Object.FindObjectOfType<SettingsUI>();
+                if (s == null)
+                    return;
+                if (SettingsUI.areSettingsOpen) s.Hide(); // areSettingsOpen belongs to the class, not one object
+                else s.Show();
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Warning("[ModConfigs] Start button: " + e.Message);
+            }
+        }
 
         // Called every frame by ModConfigsMod.
         public static void Tick()

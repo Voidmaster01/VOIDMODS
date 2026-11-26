@@ -12,22 +12,24 @@
 //     A/Cross is a left click, the right stick scrolls. MENU CONTROL STYLE (Voidmaster01's idea): "Mouse (slippy)"
 //     moves the cursor freely; "Controller (sticky)" makes each push of the stick jump the cursor onto the next
 //     button on screen in that direction (see StickyMove).
-//   - Menu buttons: Start/Options = Esc (settings), View/Share = Tab (lobby chat).
+//   - Menu buttons: Start/Options = go back / Settings (like Esc, see EscapeKey.cs), View/Share = lobby chat (like Tab).
 //   The settings are on ModConfigs' Key Binds page (CONTROLLER at the top, the buttons in each key bind row), saved in
 //   MelonPreferences (category KeyBinds).
 //
 // HOW IT WORKS
 //   Unity's Input System (which the game uses) already understands Xbox controllers (XInput) and PlayStation
 //   controllers (DualShock / DualSense) on Windows; Gamepad.current is whichever one was used last.
-//   - Everything the controller does is turned into REAL Windows input: held keys (the keyboard key chosen in Key
-//     Binds, while its button is held), cursor moves, clicks, scrolling and the Esc/Tab taps, with Windows'
-//     mouse_event / keybd_event. That is the only way the game reliably notices (tested: it only looks at its keys
-//     after a real keyboard event). It only happens while the game's own window is in front (GameHasFocus), so it
-//     can never type into other programs, and every held key is let go when the game loses focus.
-
+//   - Everything the controller does goes into the game as Unity INPUT EVENTS, the same kind the real keyboard and
+//     mouse produce: held keys (the key chosen in the row, while its button is held), clicks and scrolling are queued
+//     with InputSystem.QueueEvent, and the cursor is moved with Mouse.WarpCursorPosition. The game's menus also read
+//     Unity's Input System (tested: InputSystemUIInputModule), so they react exactly as to a mouse. These events only
+//     ever reach this game, never another program, and nothing happens while the game window isn't in front.
+//     (Version 1.1.0's first builds used Windows' keybd_event / mouse_event instead. Antivirus programs flag DLLs that
+//     use those, as keyloggers do, so ModConfigs no longer touches Windows' input functions at all.)
+//   - Start and View can't be sent as Esc / Tab that way (the game reads those two keys through Unity's OLD input
+//     system), so they call the game's own functions: EscapeKey.StartButton and the chat's SetTextChatVisibility.
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using Il2CppTMPro;
 using MelonLoader;
 using UnityEngine;
@@ -79,9 +81,9 @@ namespace ModConfigs
             menuStyle.Value = "Mouse";
         }
 
-        // ================= game keys: real key presses =================
-        // While a row's controller button is held, the keyboard key chosen in that row is held down for real through
-        // Windows; when the button is let go, so is the key. Tested: the game only looks at its keys after a real
+        // ================= game keys: key events =================
+        // While a row's controller button is held, the keyboard key chosen in that row is held down through Unity key
+        // EVENTS (SendKey); when the button is let go, so is the key. Tested: the game only looks at its keys after a
         // keyboard event, so answering from inside (like the key binds do) isn't enough for a controller.
         // "held" remembers WHICH key was actually pressed for each game key, because the role, the minigame or the
         // chosen key may change while the button is still down; the release must let go of the same key.
@@ -93,6 +95,12 @@ namespace ModConfigs
         {
             // 1. Which game keys should be down now, and as which keyboard key (only the rows that apply right now).
             wanted.Clear();
+            // 0. A real key press refreshes Unity's whole keyboard state, which can drop a key we hold: press it again.
+            Keyboard kb = Keyboard.current;
+            if (kb != null)
+                foreach (Key k in held.Values)
+                    if (!kb[k].isPressed)
+                        SendKey(k, true);
             foreach (Bind b in KeyBinds.ActiveBinds)
             {
                 GamepadButton btn;
@@ -125,57 +133,55 @@ namespace ModConfigs
             held.Clear();
         }
 
-        // Presses (down = true) or lets go of one key. Returns false for keys this table doesn't know.
-        // Windows wants a "virtual key code" (VK) and the hardware "scan code" (games using the new Input System read
-        // that one); MapVirtualKey turns the first into the second. Arrows and the Insert/Delete/Home/End/Page block
-        // are "extended" keys and need flag 1, or Windows reports them as number pad keys.
+        // Presses (down = true) or lets go of one key, as an input EVENT for Unity's keyboard (see QueueValue).
+        // Returns false for a key this keyboard doesn't have.
         private static bool SendKey(Key key, bool down)
         {
-            bool extended;
-            byte vk = VkOf(key, out extended);
-            if (vk == 0)
+            Keyboard kb = Keyboard.current;
+            if (kb == null)
                 return false;
-            byte scan = (byte)MapVirtualKey(vk, 0);
-            uint flags = (extended ? KEYEVENTF_EXTENDEDKEY : 0) | (down ? 0 : KEYEVENTF_KEYUP);
-            keybd_event(vk, scan, flags, UIntPtr.Zero);
+            KeyControl k;
+            try { k = kb[key]; } catch { return false; }
+            if (k == null)
+                return false;
+            QueueValue(kb, k, down ? 1f : 0f);
             return true;
         }
 
-        // The Input System's key name -> Windows' key code. Letters, digits, F-keys and the number pad follow a
-        // pattern; the rest is a small table.
-        private static byte VkOf(Key key, out bool extended)
+        // Sends one value into the game as an input event for a device: a key or button (1 = down, 0 = up), or a
+        // scroll amount. StateEvent.From copies the device's CURRENT state into a new event (so every other key or
+        // button stays as it really is), WriteValueIntoEvent changes just our control in that copy, and QueueEvent
+        // hands the event to Unity, which applies it in its next input update. The event lives in a block of memory
+        // Unity lends us (a NativeArray); Dispose gives it back. "finally" makes sure that happens even after an error.
+        private static void QueueValue(InputDevice device, AxisControl control, float value)
         {
-            extended = false;
-            string n = key.ToString();
-            if (n.Length == 1 && n[0] >= 'A' && n[0] <= 'Z') return (byte)n[0];                    // A..Z = 0x41..0x5A
-            if (n.StartsWith("Digit") && n.Length == 6) return (byte)('0' + (n[5] - '0'));        // 0..9 = 0x30..0x39
-            if (n.StartsWith("Numpad") && n.Length == 7 && char.IsDigit(n[6])) return (byte)(0x60 + (n[6] - '0'));
-            int f;
-            if (n.Length >= 2 && n[0] == 'F' && int.TryParse(n.Substring(1), out f) && f >= 1 && f <= 12) return (byte)(0x6F + f); // F1 = 0x70
-            byte vk;
-            if (VkTable.TryGetValue(n, out vk))
+            InputEventPtr ev;
+            var buffer = StateEvent.From(device, out ev);
+            try
             {
-                extended = Extended.Contains(n);
-                return vk;
+                control.WriteValueIntoEvent(value, ev);
+                InputSystem.QueueEvent(ev);
             }
-            return 0;
+            finally
+            {
+                buffer.Dispose();
+            }
         }
 
-        private static readonly Dictionary<string, byte> VkTable = new Dictionary<string, byte>
+        // The mouse's left button and wheel, the same way (one wheel notch = 120).
+        private static void MouseButton(bool down)
         {
-            { "Space", 0x20 }, { "Enter", 0x0D }, { "Tab", 0x09 }, { "Backspace", 0x08 }, { "Escape", 0x1B },
-            { "LeftArrow", 0x25 }, { "UpArrow", 0x26 }, { "RightArrow", 0x27 }, { "DownArrow", 0x28 },
-            { "LeftShift", 0xA0 }, { "RightShift", 0xA1 }, { "LeftCtrl", 0xA2 }, { "RightCtrl", 0xA3 },
-            { "LeftAlt", 0xA4 }, { "RightAlt", 0xA5 }, { "Insert", 0x2D }, { "Delete", 0x2E }, { "Home", 0x24 },
-            { "End", 0x23 }, { "PageUp", 0x21 }, { "PageDown", 0x22 }, { "Semicolon", 0xBA }, { "Equals", 0xBB },
-            { "Comma", 0xBC }, { "Minus", 0xBD }, { "Period", 0xBE }, { "Slash", 0xBF }, { "Backquote", 0xC0 },
-            { "LeftBracket", 0xDB }, { "Backslash", 0xDC }, { "RightBracket", 0xDD }, { "Quote", 0xDE },
-        };
-        private static readonly HashSet<string> Extended = new HashSet<string>
-        {
-            "LeftArrow", "UpArrow", "RightArrow", "DownArrow", "RightCtrl", "RightAlt", "Insert", "Delete", "Home", "End", "PageUp", "PageDown",
-        };
+            Mouse m = Mouse.current;
+            if (m != null)
+                QueueValue(m, m.leftButton, down ? 1f : 0f);
+        }
 
+        private static void MouseScroll(float amount)
+        {
+            Mouse m = Mouse.current;
+            if (m != null)
+                QueueValue(m, m.scroll.y, amount);
+        }
         // Each button's state this frame (Now) and last frame (Before), read once per frame. "Just went down" =
         // Now and not Before. (Unity's own wasPressedThisFrame only works when the controller sends input events;
         // this works for every controller.)
@@ -206,6 +212,11 @@ namespace ModConfigs
         // Called every frame by ModConfigsMod.
         public static void Tick()
         {
+            if (releaseClickNextFrame) // the second half of ClickAtCursor's click
+            {
+                releaseClickNextFrame = false;
+                MouseButton(false);
+            }
             Gamepad pad = Gamepad.current;
             if (pad == null)
                 return;
@@ -255,7 +266,7 @@ namespace ModConfigs
                 else MoveCursor(pad);
                 // Left click on A / Cross: press when the button goes down, release when it comes up.
                 bool south = pad.buttonSouth.isPressed;
-                if (south && !clickDown) { mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero); clickDown = true; }
+                if (south && !clickDown) { MouseButton(true); clickDown = true; }
                 else if (!south) ReleaseClick();
                 // Scroll with the right stick (up/down). 120 = one wheel notch; it builds up until a whole notch.
                 float y = pad.rightStick.ReadValue().y;
@@ -263,11 +274,11 @@ namespace ModConfigs
                 {
                     scrollLeft += y * Time.unscaledDeltaTime * 8f; // about 8 notches per second at full tilt
                     int notches = (int)scrollLeft;
-                    if (notches != 0) { mouse_event(MOUSEEVENTF_WHEEL, 0, 0, notches * 120, UIntPtr.Zero); scrollLeft -= notches; }
+                    if (notches != 0) { MouseScroll(notches * 120f); scrollLeft -= notches; }
                 }
-                // Menu keys: one key tap when the button goes down (Down() remembers last frame, see below).
-                if (Down(GamepadButton.Start, pad.startButton.isPressed)) TapKey(VK_ESCAPE);
-                if (Down(GamepadButton.Select, pad.selectButton.isPressed)) TapKey(VK_TAB);
+                // Menu buttons: once when the button goes down (Down() remembers last frame, see below).
+                if (Down(GamepadButton.Start, pad.startButton.isPressed)) EscapeKey.StartButton();
+                if (Down(GamepadButton.Select, pad.selectButton.isPressed)) ToggleChat();
             }
             finally
             {
@@ -292,47 +303,52 @@ namespace ModConfigs
         {
             if (!clickDown)
                 return;
-            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+            MouseButton(false);
             clickDown = false;
         }
 
-        // Moves the real cursor with the left stick, kept inside the game window. The speed grows with how far the
-        // stick is pushed (squared, so small pushes give fine control). Full tilt crosses the window in about 1.5 s.
-        // Games read "raw" mouse movement, so besides SetCursorPos an ABSOLUTE move event is sent too (see below).
+        // View / Share: shows or hides the lobby's text chat (what Tab does), with the chat's own function.
+        // FindObjectOfType finds nothing outside the lobby, and then nothing happens.
+        private static void ToggleChat()
+        {
+            Il2Cpp.TextChatUI chat = UnityEngine.Object.FindObjectOfType<Il2Cpp.TextChatUI>();
+            if (chat != null && chat.textChatCanvas != null)
+                chat.SetTextChatVisibility(!chat.textChatCanvas.enabled);
+        }
+
+        // Moves the cursor with the left stick, kept inside the game window. The speed grows with how far the stick
+        // is pushed (squared, so small pushes give fine control). Full tilt crosses the window in about 1.5 s.
+        // Positions are Unity's (bottom-left = 0,0, the game's own pixels). "aim" keeps the fractions of a pixel a
+        // slow push moves per frame, so slow movement doesn't get lost; when the real mouse moved, aim starts over.
+        private static Vector2 aim;
+
         private static void MoveCursor(Gamepad pad)
         {
             Vector2 s = pad.leftStick.ReadValue();
             float len = s.magnitude;
             if (len < 0.15f) // dead zone: sticks never rest exactly at 0
                 return;
-            RECT r;
-            POINT p;
-            IntPtr win = GetForegroundWindow();
-            if (!GetClientRect(win, out r) || !GetCursorPos(out p))
+            Mouse m = Mouse.current;
+            if (m == null)
                 return;
-            POINT topLeft = new POINT();
-            ClientToScreen(win, ref topLeft);
-            int w = r.Right - r.Left, h = r.Bottom - r.Top;
+            Vector2 now = m.position.ReadValue();
+            if ((now - aim).magnitude > 3f)
+                aim = now;
             // pixels per second at this push; times s (which already includes how far it's pushed) = squared feel
-            float speed = cursorSpeed.Value * Math.Max(w, h) / 1.5f * len;
-            float dx = s.x * speed * Time.unscaledDeltaTime;
-            float dy = -s.y * speed * Time.unscaledDeltaTime; // stick up = screen up (screen y grows downward)
-            int x = Clamp(p.X + (int)Math.Round(dx), topLeft.X, topLeft.X + w - 1);
-            int y = Clamp(p.Y + (int)Math.Round(dy), topLeft.Y, topLeft.Y + h - 1);
-            PlaceCursor(x, y);
+            float speed = cursorSpeed.Value * Math.Max(Screen.width, Screen.height) / 1.5f * len;
+            aim += s * speed * Time.unscaledDeltaTime; // stick up = up (Unity's y grows upward too)
+            aim.x = Mathf.Clamp(aim.x, 0, Screen.width - 1);
+            aim.y = Mathf.Clamp(aim.y, 0, Screen.height - 1);
+            PlaceCursor(aim);
         }
 
-        // Puts the real cursor at a Windows screen position, the way the game notices.
-        private static void PlaceCursor(int x, int y)
+        // Puts the cursor on a Unity screen point. WarpCursorPosition moves the real cursor and tells the game.
+        private static void PlaceCursor(Vector2 point)
         {
-            SetCursorPos(x, y);
-            // ABSOLUTE positions count 0..65535 across the whole desktop (all monitors, VIRTUALDESK), so convert.
-            int vx = GetSystemMetrics(SM_XVIRTUALSCREEN), vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-            int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN), vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            mouse_event(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
-                (int)((x - vx) * 65535L / Math.Max(1, vw - 1)), (int)((y - vy) * 65535L / Math.Max(1, vh - 1)), 0, UIntPtr.Zero);
+            Mouse m = Mouse.current;
+            if (m != null)
+                m.WarpCursorPosition(new Vector2(Mathf.Round(point.x), Mathf.Round(point.y)));
         }
-
         // ================= sticky menu control (Pad_MenuStyle = "Sticky") =================
         // Pushing the left stick jumps the cursor onto the nearest button in that direction, so A always lands on
         // something clickable. Holding the stick repeats: the first repeat after 0.35 s, then every 0.15 s.
@@ -373,18 +389,9 @@ namespace ModConfigs
 
         private static void Jump(Vector2 dir)
         {
-            IntPtr win = GetForegroundWindow();
-            RECT r;
-            POINT p;
-            if (!GetClientRect(win, out r) || !GetCursorPos(out p))
+            Vector2 cursor;
+            if (!CursorScreenPoint(out cursor))
                 return;
-            POINT topLeft = new POINT();
-            ClientToScreen(win, ref topLeft);
-            int w = Math.Max(1, r.Right - r.Left), h = Math.Max(1, r.Bottom - r.Top);
-            // Unity measures from the BOTTOM-left of the game's own picture, Windows from the top-left of the screen,
-            // and the picture can be scaled (the game's resolution setting), hence sx / sy.
-            float sx = Screen.width / (float)w, sy = Screen.height / (float)h;
-            Vector2 cursor = new Vector2((p.X - topLeft.X) * sx, Screen.height - (p.Y - topLeft.Y) * sy);
 
             var list = new List<Candidate>();
             foreach (Selectable sel in Selectable.allSelectablesArray)
@@ -408,7 +415,7 @@ namespace ModConfigs
             {
                 if (!Clickable(list[i].Item, list[i].Point))
                     continue;
-                PlaceCursor(topLeft.X + (int)Math.Round(list[i].Point.x / sx), topLeft.Y + (int)Math.Round((Screen.height - list[i].Point.y) / sy));
+                PlaceCursor(list[i].Point);
                 return;
             }
         }
@@ -448,49 +455,37 @@ namespace ModConfigs
             return true;
         }
 
-        // Puts the real cursor on a Unity screen point (bottom-left origin, the game's own pixels) inside the game
-        // window. Used by the "next item on screen" keys (GameContext.Item). Only while the game is in front.
+        // Puts the cursor on a Unity screen point (bottom-left origin, the game's own pixels). Used by the "next item
+        // on screen" keys (GameContext.StepItem). Only while the game is in front.
         internal static void CursorToScreenPoint(Vector2 point)
         {
-            if (!GameHasFocus())
-                return;
-            IntPtr win = GetForegroundWindow();
-            RECT r;
-            if (!GetClientRect(win, out r))
-                return;
-            POINT topLeft = new POINT();
-            ClientToScreen(win, ref topLeft);
-            int w = Math.Max(1, r.Right - r.Left), h = Math.Max(1, r.Bottom - r.Top);
-            float sx = Screen.width / (float)w, sy = Screen.height / (float)h;
-            PlaceCursor(topLeft.X + (int)Math.Round(point.x / sx), topLeft.Y + (int)Math.Round((Screen.height - point.y) / sy));
+            if (GameHasFocus())
+                PlaceCursor(point);
         }
 
-        // One real left click where the cursor is (the "use the selected button" key). A real click, so the game does
-        // exactly what a mouse click does there: its own limits apply (a lure's 2 uses, a tracker switching on/off).
+        // One left click where the cursor is (the Janitor's "use the selected lure / tracker" key): button down now,
+        // up on the next frame (Tick), like a real click. The game does exactly what a mouse click does there, so its
+        // own limits apply (a lure's 2 uses, a tracker switching on/off).
+        private static bool releaseClickNextFrame;
+
         internal static void ClickAtCursor()
         {
-            if (!GameHasFocus() || clickDown)
+            if (!GameHasFocus() || clickDown || releaseClickNextFrame)
                 return;
-            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+            MouseButton(true);
+            releaseClickNextFrame = true;
         }
 
-        // Where the cursor is now, in Unity screen points (to find which item it is on). False when it can't tell.
+        // Where the cursor is now, in Unity screen points. False when it can't tell (no mouse, or not in front).
         internal static bool CursorScreenPoint(out Vector2 point)
         {
             point = Vector2.zero;
-            IntPtr win = GetForegroundWindow();
-            RECT r;
-            POINT p;
-            if (!GameHasFocus() || !GetClientRect(win, out r) || !GetCursorPos(out p))
+            Mouse m = Mouse.current;
+            if (m == null || !GameHasFocus())
                 return false;
-            POINT topLeft = new POINT();
-            ClientToScreen(win, ref topLeft);
-            int w = Math.Max(1, r.Right - r.Left), h = Math.Max(1, r.Bottom - r.Top);
-            point = new Vector2((p.X - topLeft.X) * Screen.width / (float)w, Screen.height - (p.Y - topLeft.Y) * Screen.height / (float)h);
+            point = m.position.ReadValue();
             return true;
         }
-
         // Would a click at this point really reach this element? (Nothing else on top of it.)
         private static bool Clickable(Selectable sel, Vector2 point)
         {
@@ -507,22 +502,11 @@ namespace ModConfigs
             return top != null && (top == sel.gameObject || top.transform.IsChildOf(sel.transform));
         }
 
-        private static int Clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
-
-        private static void TapKey(byte vk)
-        {
-            keybd_event(vk, 0, 0, UIntPtr.Zero);
-            keybd_event(vk, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-        }
-
-        // True only when the window in front belongs to this game (our own process).
+        // True only while the game's window is the one in front (Unity knows this itself).
         private static bool GameHasFocus()
         {
-            uint pid;
-            GetWindowThreadProcessId(GetForegroundWindow(), out pid);
-            return pid == (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+            return Application.isFocused;
         }
-
         // ================= "press a button..." =================
 
         internal static bool IsCapturing(Bind b) { return captureBind == b; }
@@ -637,27 +621,5 @@ namespace ModConfigs
         private static void SetSpeed(double v) { cursorSpeed.Value = (float)v; Save(); }
         private static void Save() { MelonPreferences.GetCategory(KeyBinds.Category).SaveToFile(false); }
 
-        // ================= Windows functions (user32.dll) =================
-        // [DllImport] tells .NET "this function is inside user32.dll, a part of Windows". The numbers are the flags
-        // Windows defines for each function.
-        private const uint MOUSEEVENTF_MOVE = 0x0001, MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004,
-            MOUSEEVENTF_WHEEL = 0x0800, MOUSEEVENTF_VIRTUALDESK = 0x4000, MOUSEEVENTF_ABSOLUTE = 0x8000;
-        private const uint KEYEVENTF_EXTENDEDKEY = 0x0001, KEYEVENTF_KEYUP = 0x0002;
-        private const byte VK_TAB = 0x09, VK_ESCAPE = 0x1B;
-        private const int SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77, SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
-
-        [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
-        [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
-
-        [DllImport("user32.dll")] private static extern void mouse_event(uint flags, int dx, int dy, int data, UIntPtr extra);
-        [DllImport("user32.dll")] private static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
-        [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
-        [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
-        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
-        [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr h, out RECT r);
-        [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr h, ref POINT p);
-        [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
-        [DllImport("user32.dll")] private static extern uint MapVirtualKey(uint code, uint mapType);
     }
 }
