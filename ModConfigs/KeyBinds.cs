@@ -24,6 +24,12 @@
 // LIMITS
 //   Esc (settings), Tab (chat), N (what's new) and ? (how to play) are read another way (Unity's old input system,
 //   which crashes the game when patched), so they can't be moved here. The game's own Settings has the mute key.
+//
+// CONTROLLERS
+//   Controller.cs presses the REAL keyboard key (the one chosen here) while its controller button is held, because
+//   the game only looks at its keys after a real keyboard event (tested: it never asked about A while only a
+//   controller button was pressed). ChosenKey tells it which key to press. The page shows the controller settings
+//   between the keys and the DANGER ZONE.
 
 using System;
 using System.Collections.Generic;
@@ -77,6 +83,7 @@ namespace ModConfigs
             Add(cat, Key.S, "Flip monitor (Security) / Shock (Backstage)");
             Add(cat, Key.D, "Close right door (Security) / Look right (Parts & Services, Backstage) / Monitor (Janitor)");
             Add(cat, Key.Space, "Open/close laptop (Parts & Services)");
+            Controller.Load(cat); // the controller settings live in the same category (Controller.cs)
             Rebuild();
         }
 
@@ -108,6 +115,13 @@ namespace ModConfigs
             return remap.TryGetValue(b.GameKey, out k) ? k : b.GameKey;
         }
 
+        // The keyboard key the player chose for a game key (the game key itself when it wasn't moved).
+        internal static Key ChosenKey(Key gameKey)
+        {
+            Key k;
+            return remap.TryGetValue(gameKey, out k) ? k : gameKey;
+        }
+
         private static void Save(Bind b, Key key)
         {
             b.Entry.Value = key.ToString();
@@ -121,6 +135,7 @@ namespace ModConfigs
             capturing = null;
             foreach (Bind b in binds)
                 b.Entry.Value = b.GameKey.ToString();
+            Controller.ResetAll(); // the controller buttons and speed go back to their defaults too
             MelonPreferences.GetCategory(Category).SaveToFile(false);
             Rebuild();
         }
@@ -132,30 +147,29 @@ namespace ModConfigs
         internal static bool TryAnswer(ButtonControl control, int which, out bool answer)
         {
             answer = false;
-            if (Bypass || remap.Count == 0)
+            if (Bypass)
                 return false;
             KeyControl key = control.TryCast<KeyControl>(); // TryCast = "is it really a key? then treat it as one"
             if (key == null)
                 return false;
+            Key gameKey = key.keyCode;
             Key to;
-            if (!remap.TryGetValue(key.keyCode, out to))
-                return false;
-            Keyboard kb = Keyboard.current;
-            if (kb == null)
-                return false;
+            if (!remap.TryGetValue(gameKey, out to))
+                return false; // not moved: the game gets its normal answer
             Bypass = true;
             try
             {
-                KeyControl other = kb[to];
-                answer = which == 0 ? other.isPressed : which == 1 ? other.wasPressedThisFrame : other.wasReleasedThisFrame;
+                Keyboard kb = Keyboard.current;
+                KeyControl source = kb != null ? kb[to] : null;
+                answer = source != null && (which == 0 ? source.isPressed : which == 1 ? source.wasPressedThisFrame : source.wasReleasedThisFrame);
             }
             finally
             {
-                Bypass = false; // finally runs even if something above failed, so Bypass can't get stuck on
+                Bypass = false; // finally runs even after "return" or an error, so Bypass can't get stuck on
             }
             // One log line per moved key per game session, the first time the game uses it (handy for bug reports).
-            if (logged.Add(key.keyCode))
-                MelonLogger.Msg("[ModConfigs] Key binds: the game asked for " + Pretty(key.keyCode) + ", answered with " + Pretty(to) + ".");
+            if (logged.Add(gameKey))
+                MelonLogger.Msg("[ModConfigs] Key binds: the game asked for " + Pretty(gameKey) + ", answered with " + Pretty(to) + ".");
             return true;
         }
 
@@ -204,6 +218,12 @@ namespace ModConfigs
         public static void BuildPage(ConfigPage page)
         {
             BuildSection(page);
+            page.Space(20);
+            // The controller section gets the same game keys with what they do (Controller.cs).
+            var keys = new List<KeyValuePair<Key, string>>();
+            foreach (Bind b in binds)
+                keys.Add(new KeyValuePair<Key, string>(b.GameKey, b.What));
+            Controller.BuildSection(page, keys);
             page.Space(30);
             DangerZone.BuildSection(page);
         }

@@ -25,6 +25,7 @@
 //   PngReader.cs: reads PNG files  MenuRow.cs: the menu row               HubPanel.cs: the panel itself
 //   FileConfigs.cs: other mods' own config files              NoClearData.cs: turns off hold-D clear save data
 //   GameSave.cs: back up / clear the save on purpose          KeyBinds.cs + DangerZone.cs: the built-in Key Binds page
+//   Controller.cs: Xbox / PlayStation / other controllers (also on the Key Binds page)
 
 using MelonLoader;
 
@@ -57,6 +58,7 @@ namespace ModConfigs
             HubPanel.Tick();   // rebuilds the panel page when a click asked for it (on the next frame, see HubPanel.Later)
             FileConfigs.Tick();
             KeyBinds.Tick();   // waits for a key while a key bind shows "PRESS A KEY..."
+            Controller.Tick(); // controller: cursor, click, scroll, Esc/Tab, and "PRESS A BUTTON..."
             DangerZone.Tick(); // the DANGER ZONE button's countdown
         }
 
