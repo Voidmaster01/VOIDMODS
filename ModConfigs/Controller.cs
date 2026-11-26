@@ -444,9 +444,14 @@ namespace ModConfigs
             if (!CursorScreenPoint(out cursor))
                 return;
             GameObject top = TopHit(cursor);
-            ScrollRect sr = top != null ? top.GetComponentInParent<ScrollRect>() : null;
-            if (sr == null || sr.content == null || !sr.vertical)
+            if (top == null)
                 return;
+            ScrollRect sr = top.GetComponentInParent<ScrollRect>();
+            if (sr == null || sr.content == null || !sr.vertical)
+            {
+                ScrollBarFallback(top, stickY);
+                return;
+            }
             RectTransform view = sr.viewport != null ? sr.viewport : sr.transform.TryCast<RectTransform>();
             float room = sr.content.rect.height - view.rect.height; // how far the list can move at all
             if (room <= 0)
@@ -455,6 +460,31 @@ namespace ModConfigs
             float step = stickY * view.rect.height * Time.unscaledDeltaTime / room;
             sr.velocity = Vector2.zero; // stop any leftover "flick" movement
             sr.verticalNormalizedPosition = Mathf.Clamp01(sr.verticalNormalizedPosition + step);
+        }
+
+        // Some of the game's screens (the ACHIEVEMENTS list) scroll with a plain Scrollbar that moves the list itself,
+        // not with a ScrollRect. Then the stick moves that scrollbar: the one under the cursor, or else the first
+        // switched-on vertical scrollbar on the same screen (canvas). Scrollbar.size = how much of the list is visible
+        // (0..1), so moving "size" per second at full tilt is one screenful per second, like the lists above.
+        private static void ScrollBarFallback(GameObject top, float stickY)
+        {
+            Scrollbar bar = top.GetComponentInParent<Scrollbar>();
+            if (bar == null)
+            {
+                Canvas canvas = top.GetComponentInParent<Canvas>();
+                if (canvas != null)
+                    foreach (Scrollbar b in canvas.rootCanvas.GetComponentsInChildren<Scrollbar>(false))
+                        if (b.isActiveAndEnabled && b.IsInteractable() &&
+                            (b.direction == Scrollbar.Direction.BottomToTop || b.direction == Scrollbar.Direction.TopToBottom))
+                        { bar = b; break; }
+            }
+            if (bar == null)
+                return;
+            float step = stickY * Mathf.Max(bar.size, 0.05f) * Time.unscaledDeltaTime;
+            // BottomToTop: value 1 = the top of the list; TopToBottom: value 0 = the top. Stick up = towards the top.
+            if (bar.direction == Scrollbar.Direction.TopToBottom)
+                step = -step;
+            bar.value = Mathf.Clamp01(bar.value + step); // setting value moves the list, like dragging the bar
         }
 
         // If the element sits in a scrolling list that is visible but scrolled away from it, scrolls the list just
