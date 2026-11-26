@@ -12,7 +12,8 @@
 //     A/Cross is a left click, the right stick scrolls. MENU CONTROL STYLE (Voidmaster01's idea): "Mouse (slippy)"
 //     moves the cursor freely; "Controller (sticky)" makes each push of the stick jump the cursor onto the next
 //     button on screen in that direction (see StickyMove).
-//   - Menu buttons: Start/Options = go back / Settings (like Esc, see EscapeKey.cs), View/Share = lobby chat (like Tab).
+//   - Menu buttons: Start/Options = go back / Settings (like Esc, see EscapeKey.cs); B/Circle does the same unless a
+//     key bind row of the current role uses B; View/Share = lobby chat (like Tab).
 //   The settings are on ModConfigs' Key Binds page (CONTROLLER at the top, the buttons in each key bind row), saved in
 //   MelonPreferences (category KeyBinds).
 //
@@ -278,6 +279,8 @@ namespace ModConfigs
                 }
                 // Menu buttons: once when the button goes down (Down() remembers last frame, see below).
                 if (Down(GamepadButton.Start, pad.startButton.isPressed)) EscapeKey.StartButton();
+                // B / Circle = back, like Esc (Voidmaster01), unless a key bind row of the current role / minigame uses B.
+                if (Down(GamepadButton.East, pad.buttonEast.isPressed) && !InUse("East")) EscapeKey.StartButton();
                 if (Down(GamepadButton.Select, pad.selectButton.isPressed)) ToggleChat();
             }
             finally
@@ -305,6 +308,16 @@ namespace ModConfigs
                 return;
             MouseButton(false);
             clickDown = false;
+        }
+
+        // Is this controller button (saved name, e.g. "East") used by a key bind row that applies right now?
+        private static bool InUse(string button)
+        {
+            foreach (Bind b in KeyBinds.ActiveBinds)
+                if (b.PadEntry.Value == button) return true;
+            foreach (Bind b in KeyBinds.ActiveActions)
+                if (b.PadEntry.Value == button) return true;
+            return false;
         }
 
         // View / Share: shows or hides the lobby's text chat (what Tab does), with the chat's own function.
@@ -609,7 +622,7 @@ namespace ModConfigs
             page.Choice("Menu control style", StyleLabels, new Func<int>(GetStyle), new Action<int>(SetStyle));
             page.Slider("Cursor speed (left stick, Mouse style)", new Func<double>(GetSpeed), new Action<double>(SetSpeed), 0.3, 3.0, "0.0");
             page.Label("Always: left stick = cursor (free, or jumping between buttons in Sticky style), A / Cross = click, right stick = scroll, "
-                + "Start / Options = Esc (settings), View / Share = Tab (lobby chat). The game's keys are on buttons per role, in the rows below.", 18).color = UiKit.DimText;
+                + "Start / Options and B / Circle = back like Esc (B only when no row below uses it), View / Share = Tab (lobby chat). The game's keys are on buttons per role, in the rows below.", 18).color = UiKit.DimText;
         }
 
         private static int GetStyle() { return Sticky ? 1 : 0; }
