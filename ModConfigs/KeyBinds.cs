@@ -5,23 +5,23 @@
 // ModConfigs). Binding is done here on the home screen, never during a night (Voidmaster01's decision).
 //
 // WHAT IT DOES
-//   The page has one section per role and per minigame, listing only the keys that role uses (from the game's own
-//   TIPS screens and role cards, collected by Voidmaster01):
+//   Every crew role has TWO sections (Voidmaster01's design): MONITOR DOWN and MONITOR UP, each listing the keys that
+//   role uses (from the game's own TIPS screens and role cards, collected by Voidmaster01). The monitor-up section
+//   also has Q / E (LB / RB) for the previous / next laptop tab: keys the game doesn't have, ADDED by ModConfigs.
 //     Security Office        A close left door, D close right door, S flip monitor
-//     Parts & Service        A look left, D look right, Space open/close laptop, W open/close door
+//     Parts & Service        A look left, D look right, Space open/close laptop, W open/close door ("laptop open")
 //       Midnight Motorist    W A S D drive (the laptop's Games tab; the arrow keys always work too)
-//     Backstage              A look left, D look right, S shock, W open/close door
+//     Backstage              A look left, D look right, S shock, W open/close door. Its computer screen is always on,
+//                            so "monitor up" = while LOOKING at it ("at the computer screen" vs "looking around")
 //     Janitor's Closet       A open/close mask, D flip monitor
 //       Freddy in Space      Space fly (the laptop's Games tab)
-//     Laptop / monitor tabs  Q previous tab, E next tab (LB/RB): ADDED keys, every crew role, while the laptop or
-//                            monitor is open; their buttons win over the role's buttons then
 //     Purple Guy             A open/close left screen, D right screen: keys the game DOESN'T have (it only has the
 //                            mouse on the screen-edge bars), ADDED by ModConfigs (Voidmaster01's defaults, LB/RB too)
 //   Every row has a keyboard key and a controller button. GameContext.cs tells which section applies right now:
-//   the player's role, plus the minigame's section ON TOP while its Games tab is open (the minigame's keys win, the
-//   role's other keys keep working, so the Janitor's mask still works while flying). Outside a night, and while dead
-//   or spectating, nothing is changed. Saved in UserData\MelonPreferences.cfg, category KeyBinds, as
-//   Key_<section>_<key> and Pad_<section>_<key>.
+//   the player's role and whether the monitor is up, plus the minigame's section ON TOP while its Games tab is open
+//   (the minigame's keys win, the role's other keys keep working, so the Janitor's mask still works while flying).
+//   Outside a night, and while dead or spectating, nothing is changed. Saved in UserData\MelonPreferences.cfg,
+//   category KeyBinds, as Key_<section>_<key> and Pad_<section>_<key> (the monitor-down sections kept their old ids).
 //
 // HOW THE KEYBOARD REMAPPING WORKS
 //   The game reads these keys with Unity's new Input System, by asking a key object "isPressed?" (also
@@ -75,7 +75,7 @@ namespace ModConfigs
         public string Note;          // a dim line under the title (may be null)
         public PlayerRoles Role;
         public bool Minigame;        // true = applies on top of the role's section while the Games tab is open
-        public bool Laptop;          // true = applies to every crew role while the laptop / monitor is open
+        public bool Monitor;         // true = applies while the monitor / laptop is up (Backstage: looking at its screen)
         public readonly List<Bind> Binds = new List<Bind>();
     }
 
@@ -111,50 +111,68 @@ namespace ModConfigs
             MelonPreferences_Category cat = MelonPreferences.CreateCategory(Category, PageName);
             KeySection s;
 
-            s = Section("Security", "Security Office", PlayerRoles.SecurityOffice, false, null);
+            // Every crew role has TWO sections (Voidmaster01's design): monitor down, and monitor up. The monitor-up one
+            // also has the laptop tab keys. The ids of the monitor-down sections are the ones used before, so earlier
+            // choices carry over. Monitor-up defaults: like monitor down, but LB/RB go to the tabs (doors on the D-pad).
+            s = Section("Security", "Security Office: monitor down", PlayerRoles.SecurityOffice, false, false, null);
             Add(cat, s, Key.A, "Close left door", GamepadButton.LeftShoulder);
             Add(cat, s, Key.D, "Close right door", GamepadButton.RightShoulder);
             Add(cat, s, Key.S, "Flip monitor up/down", GamepadButton.North);
+            s = Section("SecurityMonitor", "Security Office: monitor up", PlayerRoles.SecurityOffice, false, true, null);
+            Add(cat, s, Key.A, "Close left door", GamepadButton.DpadLeft);
+            Add(cat, s, Key.D, "Close right door", GamepadButton.DpadRight);
+            Add(cat, s, Key.S, "Flip monitor up/down", GamepadButton.North);
+            Tabs(cat, s);
 
-            s = Section("PartsService", "Parts & Service", PlayerRoles.PartsAndService, false, null);
+            s = Section("PartsService", "Parts & Service: laptop closed", PlayerRoles.PartsAndService, false, false, null);
             Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
             Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
             Add(cat, s, Key.Space, "Open/close laptop", GamepadButton.North);
             Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
+            s = Section("PartsServiceMonitor", "Parts & Service: laptop open", PlayerRoles.PartsAndService, false, true, null);
+            Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
+            Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
+            Add(cat, s, Key.Space, "Open/close laptop", GamepadButton.North);
+            Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
+            Tabs(cat, s);
 
-            s = Section("Motorist", "Parts & Service: Midnight Motorist (minigame)", PlayerRoles.PartsAndService, true,
-                "While the laptop's Games tab is open. The arrow keys always drive too.");
+            s = Section("Motorist", "Parts & Service: Midnight Motorist (minigame)", PlayerRoles.PartsAndService, true, true,
+                "On top of \"laptop open\" while the Games tab is open. The arrow keys always drive too.");
             Add(cat, s, Key.W, "Drive up", GamepadButton.DpadUp);
             Add(cat, s, Key.A, "Drive left", GamepadButton.DpadLeft);
             Add(cat, s, Key.S, "Drive down", GamepadButton.DpadDown);
             Add(cat, s, Key.D, "Drive right", GamepadButton.DpadRight);
 
-            s = Section("Backstage", "Backstage", PlayerRoles.Backstage, false, null);
+            // Backstage's computer screen is always on, so "monitor up" = while you are LOOKING at it (its camera view
+            // is the monitor view; A/D turn you there), and "monitor down" = looking at the door, shock or maintenance.
+            s = Section("Backstage", "Backstage: looking around", PlayerRoles.Backstage, false, false,
+                "Door, shock and maintenance views.");
             Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
             Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
             Add(cat, s, Key.S, "Shock", GamepadButton.North);
             Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
+            s = Section("BackstageMonitor", "Backstage: at the computer screen", PlayerRoles.Backstage, false, true,
+                "Backstage's screen is always on: this applies while you are looking at it.");
+            Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
+            Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
+            Add(cat, s, Key.S, "Shock", GamepadButton.North);
+            Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
+            Tabs(cat, s);
 
-            s = Section("Janitor", "Janitor's Closet", PlayerRoles.Janitor, false, null);
+            s = Section("Janitor", "Janitor's Closet: monitor down", PlayerRoles.Janitor, false, false, null);
             Add(cat, s, Key.A, "Open/close mask", GamepadButton.West);
             Add(cat, s, Key.D, "Flip monitor up/down", GamepadButton.North);
+            s = Section("JanitorMonitor", "Janitor's Closet: monitor up", PlayerRoles.Janitor, false, true, null);
+            Add(cat, s, Key.A, "Open/close mask", GamepadButton.West);
+            Add(cat, s, Key.D, "Flip monitor up/down", GamepadButton.North);
+            Tabs(cat, s);
 
-            s = Section("FreddySpace", "Janitor: Freddy in Space (minigame)", PlayerRoles.Janitor, true,
-                "While the laptop's Games tab is open. Your mask and monitor keys keep working.");
+            s = Section("FreddySpace", "Janitor: Freddy in Space (minigame)", PlayerRoles.Janitor, true, true,
+                "On top of \"monitor up\" while the Games tab is open. Your mask and monitor keys keep working.");
             Add(cat, s, Key.Space, "Fly (hold)", GamepadButton.South);
-
-            // The laptop / monitor tab bar is mouse-only in the game; these keys are ADDED (Voidmaster01: LB/RB).
-            // While the laptop is open its buttons win over the role's (see Rebuild), so LB/RB change tabs then.
-            s = Section("Laptop", "Laptop / monitor tabs (every crew role)", PlayerRoles.None, false,
-                "While your laptop or monitor is open. These buttons win over your role's buttons then (Security: close the doors "
-                + "with the keyboard keys while the monitor is up, or give them other buttons).");
-            s.Laptop = true;
-            Add(cat, s, Key.Q, "Previous tab", GamepadButton.LeftShoulder).OnPress = new Action(GameContext.PreviousTab);
-            Add(cat, s, Key.E, "Next tab", GamepadButton.RightShoulder).OnPress = new Action(GameContext.NextTab);
-
             // Purple Guy has no keys in the game: his screens open only with the mouse on the bars at the screen edges.
             // These two keys are ADDED by ModConfigs (Voidmaster01's defaults: A/D and LB/RB); see GameContext.cs.
-            s = Section("PurpleGuy", "Purple Guy", PlayerRoles.PurpleGuy, false,
+            s = Section("PurpleGuy", "Purple Guy", PlayerRoles.PurpleGuy, false, false,
                 "The game only has the mouse for these; ModConfigs adds the keys. They don't fire while you type in a text box.");
             Add(cat, s, Key.A, "Open/close left screen", GamepadButton.LeftShoulder).OnPress = new Action(GameContext.FlipPurpleLeft);
             Add(cat, s, Key.D, "Open/close right screen", GamepadButton.RightShoulder).OnPress = new Action(GameContext.FlipPurpleRight);
@@ -164,11 +182,20 @@ namespace ModConfigs
             Rebuild();
         }
 
-        private static KeySection Section(string id, string title, PlayerRoles role, bool minigame, string note)
+        // monitor: true = the section applies while the monitor / laptop is up (minigames always sit on "up").
+        private static KeySection Section(string id, string title, PlayerRoles role, bool minigame, bool monitor, string note)
         {
-            var s = new KeySection { Id = id, Title = title, Role = role, Minigame = minigame, Note = note };
+            var s = new KeySection { Id = id, Title = title, Role = role, Minigame = minigame, Monitor = monitor, Note = note };
             sections.Add(s);
             return s;
+        }
+
+        // The laptop / monitor tab bar is mouse-only in the game; these keys are ADDED (Voidmaster01: LB/RB). They
+        // call the game's own next / previous tab functions (GameContext.NextTab / PreviousTab).
+        private static void Tabs(MelonPreferences_Category cat, KeySection s)
+        {
+            Add(cat, s, Key.Q, "Previous tab (added by ModConfigs)", GamepadButton.LeftShoulder).OnPress = new Action(GameContext.PreviousTab);
+            Add(cat, s, Key.E, "Next tab (added by ModConfigs)", GamepadButton.RightShoulder).OnPress = new Action(GameContext.NextTab);
         }
 
         // is_hidden = true: the entries don't get their own automatic rows in MOD CONFIGS; our page shows them instead.
@@ -192,27 +219,19 @@ namespace ModConfigs
             return chosen;
         }
 
-        // Works out what applies now: the role's section, then the minigame section on top (same key = minigame wins).
+        // Works out what applies now: the role's section for the monitor's state (down / up), then the minigame
+        // section on top (same key = minigame wins).
         private static void Rebuild()
         {
             active.Clear();
             remap.Clear();
             actions.Clear();
-            blockedPads.Clear();
             PlayerRoles role = GameContext.Role;
             if (role == PlayerRoles.None)
                 return;
-            // The laptop tab keys first: their controller buttons are then "taken" while the laptop is open.
-            if (GameContext.LaptopOpen)
-                foreach (KeySection s in sections)
-                    if (s.Laptop)
-                        foreach (Bind b in s.Binds)
-                        {
-                            actions.Add(b);
-                            if (b.PadEntry.Value != "None") blockedPads.Add(b.PadEntry.Value);
-                        }
+            bool up = GameContext.MonitorUp;
             foreach (KeySection s in sections)
-                if (s.Role == role && !s.Minigame)
+                if (s.Role == role && !s.Minigame && s.Monitor == up)
                     foreach (Bind b in s.Binds)
                     {
                         if (b.OnPress != null) actions.Add(b); // added keys never change the game's own key answers
@@ -237,10 +256,6 @@ namespace ModConfigs
         // The added-key rows that apply right now (Purple Guy's screens); Tick and Controller.Tick run their OnPress.
         private static readonly List<Bind> actions = new List<Bind>();
         internal static List<Bind> ActiveActions { get { return actions; } }
-
-        // Controller buttons taken by the laptop tab keys while the laptop is open: the role's rows don't use them then.
-        private static readonly HashSet<string> blockedPads = new HashSet<string>();
-        internal static bool PadTaken(Bind b) { return b.OnPress == null && blockedPads.Contains(b.PadEntry.Value); }
 
         // Runs an added key's action, unless the player is typing in a text box.
         internal static void Press(Bind b)
@@ -436,7 +451,7 @@ namespace ModConfigs
             var rows = new List<Bind>(s.Binds);
             if (s.Minigame)
                 foreach (KeySection r in sections)
-                    if (r.Role == s.Role && !r.Minigame)
+                    if (r.Role == s.Role && !r.Minigame && r.Monitor) // the monitor-up section it sits on
                         foreach (Bind b in r.Binds)
                             if (s.Binds.Find(new Predicate<Bind>(new SameGameKey(b.GameKey).Matches)) == null)
                                 rows.Add(b);

@@ -96,8 +96,7 @@ namespace ModConfigs
             foreach (Bind b in KeyBinds.ActiveBinds)
             {
                 GamepadButton btn;
-                // PadTaken: while the laptop is open, its tab buttons (LB/RB by default) don't also press role keys.
-                if (!KeyBinds.PadTaken(b) && ButtonFor(b, out btn) && Snapshot(pad, btn).Now)
+                if (ButtonFor(b, out btn) && Snapshot(pad, btn).Now)
                     wanted[b.GameKey] = KeyBinds.Chosen(b);
             }
             // 2. Let go of keys that are no longer wanted (or that changed). The loop walks a copy (new List(held)),

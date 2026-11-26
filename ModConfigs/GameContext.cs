@@ -6,7 +6,8 @@
 //             spectating: then the game's keys are never changed).
 //   Minigame: true while the player looks at the laptop's Games tab (Midnight Motorist for Parts & Service, Freddy in
 //             Space for the Janitor).
-//   Laptop:   true while a crew role's laptop / monitor is open on any tab (for the tab-switching keys).
+//   Monitor:  true while a crew role's monitor / laptop is up (Backstage: while looking at its always-on screen),
+//             so every role can have a "monitor down" and a "monitor up" set of keys.
 //   Every change is written to the log ("[ModConfigs] Key binds now: Janitor's Closet + minigame") for bug reports.
 //   It also opens Purple Guy's left/right screens for the keys ModConfigs adds for him (see the end of this file),
 //   and tells when the player is typing in a text box.
@@ -37,15 +38,9 @@ namespace ModConfigs
 
         public static PlayerRoles Role { get; private set; } = PlayerRoles.None;
         public static bool InMinigame { get; private set; }
-        // True while a crew role's laptop / monitor is open on any tab (Cameras, Comms, Games, Manual, Wordle...).
-        public static bool LaptopOpen { get; private set; }
+        // True while a crew role's monitor / laptop is up (Backstage: looking at its always-on computer screen).
+        public static bool MonitorUp { get; private set; }
         private static PlayerComputer computer; // the local player's laptop / monitor, for the tab keys
-
-        private static readonly ComputerScreen[] Screens =
-        {
-            ComputerScreen.Cameras, ComputerScreen.Comms, ComputerScreen.MotionDetection, ComputerScreen.AudioLure,
-            ComputerScreen.Games, ComputerScreen.Manual, ComputerScreen.Wordle,
-        };
 
         // Raised (from Tick, on the main thread) when Role or InMinigame changed.
         public static event Action Changed;
@@ -63,7 +58,7 @@ namespace ModConfigs
                 return;
             nextCheck = Time.unscaledTime + 0.1f;
             PlayerRoles role = PlayerRoles.None;
-            bool minigame = false, laptop = false;
+            bool minigame = false, monitorUp = false;
             PlayerComputer pc = null;
             // "manager == null" is also true once Unity destroyed it (the match ended), see UnityEngine.Object.
             if (manager != null)
@@ -80,10 +75,17 @@ namespace ModConfigs
                             pc = me != null ? me.playerComputer : null;
                             if (pc != null)
                             {
-                                // IsWatchingSystem(tab) = the laptop / monitor is open on that tab.
-                                foreach (ComputerScreen sc in Screens)
-                                    if (pc.IsWatchingSystem(sc)) { laptop = true; break; }
-                                minigame = (role == PlayerRoles.PartsAndService || role == PlayerRoles.Janitor) && pc.IsWatchingSystem(ComputerScreen.Games);
+                                // Monitor up: the computer's own isMonitorUp flag. Backstage's screen is always on
+                                // (isMonitorAlwaysUp), so for Backstage "up" = its camera is on the monitor view.
+                                if (pc.isMonitorAlwaysUp)
+                                {
+                                    BackstagePlayerBehaviour bs = me.TryCast<BackstagePlayerBehaviour>();
+                                    monitorUp = bs != null && bs.backstageCameraController != null
+                                        && bs.backstageCameraController.currentView.Value == BackstageCameraController_View.MonitorView;
+                                }
+                                else
+                                    monitorUp = pc.isMonitorUp.Value;
+                                minigame = monitorUp && (role == PlayerRoles.PartsAndService || role == PlayerRoles.Janitor) && pc.IsWatchingSystem(ComputerScreen.Games);
                             }
                         }
                     }
@@ -93,18 +95,18 @@ namespace ModConfigs
                     // Between rounds the manager can be half torn down; act as "no role" and try again next time.
                     if (!warned) { warned = true; MelonLogger.Warning("[ModConfigs] Couldn't read the role (keys stay as the game has them): " + e.Message); }
                     role = PlayerRoles.None;
-                    minigame = laptop = false;
+                    minigame = monitorUp = false;
                     pc = null;
                 }
             }
             computer = pc;
-            if (role == Role && minigame == InMinigame && laptop == LaptopOpen)
+            if (role == Role && minigame == InMinigame && monitorUp == MonitorUp)
                 return;
             Role = role;
             InMinigame = minigame;
-            LaptopOpen = laptop;
+            MonitorUp = monitorUp;
             MelonLogger.Msg("[ModConfigs] Key binds now: " + (role == PlayerRoles.None ? "none (the game's own keys)"
-                : role + (laptop ? " + laptop" : "") + (minigame ? " + minigame" : "")));
+                : role + (monitorUp ? " + monitor up" : "") + (minigame ? " + minigame" : "")));
             if (Changed != null)
                 Changed();
         }
@@ -146,7 +148,7 @@ namespace ModConfigs
 
         private static void Tab(bool next)
         {
-            if (!LaptopOpen || computer == null)
+            if (!MonitorUp || computer == null)
                 return;
             try
             {
