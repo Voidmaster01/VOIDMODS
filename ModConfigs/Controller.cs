@@ -444,27 +444,61 @@ namespace ModConfigs
             if (!CursorScreenPoint(out cursor))
                 return;
             GameObject top = TopHit(cursor);
+            Scrollbar used;
             if (top == null)
             {
-                // Nothing that catches clicks under the cursor (like the empty parts of the ACHIEVEMENTS screen):
-                // look for a visible scrollbar anywhere instead.
-                ScrollBarFallback(null, stickY);
-                return;
+                // Nothing that catches clicks under the cursor: look for a visible scrollbar anywhere instead.
+                used = ScrollBarFallback(null, stickY);
             }
-            ScrollRect sr = top.GetComponentInParent<ScrollRect>();
-            if (sr == null || sr.content == null || !sr.vertical)
+            else
             {
-                ScrollBarFallback(top, stickY);
-                return;
+                ScrollRect sr = top.GetComponentInParent<ScrollRect>();
+                // On a scrollbar that sits BESIDE its list (ACHIEVEMENTS; also where sticky style parks the cursor):
+                // scroll the list next to it, not the bar. The game keeps such a bar in line with its list every
+                // frame, so moving only the bar would be undone at once.
+                if (sr == null)
+                {
+                    Scrollbar onBar = top.GetComponentInParent<Scrollbar>();
+                    if (onBar != null && onBar.transform.parent != null)
+                        foreach (ScrollRect near in onBar.transform.parent.GetComponentsInChildren<ScrollRect>(false))
+                            if (near != null && near.isActiveAndEnabled && near.vertical) { sr = near; break; }
+                }
+                if (sr == null || sr.content == null || !sr.vertical)
+                    used = ScrollBarFallback(top, stickY);
+                else
+                {
+                    used = sr.verticalScrollbar;
+                    // Some lists (ACHIEVEMENTS) have their scrollbar beside them without linking it to the list;
+                    // then use the visible up/down scrollbar next to the list (under the same parent).
+                    if (used == null && sr.transform.parent != null)
+                        used = FirstVerticalBar(sr.transform.parent.GetComponentsInChildren<Scrollbar>(false));
+                    RectTransform view = sr.viewport != null ? sr.viewport : sr.transform.TryCast<RectTransform>();
+                    float room = sr.content.rect.height - view.rect.height; // how far the list can move at all
+                    if (room > 0)
+                    {
+                        // verticalNormalizedPosition: 1 = top, 0 = bottom. Stick up (positive) = towards the top.
+                        float step = stickY * view.rect.height * Time.unscaledDeltaTime / room;
+                        sr.velocity = Vector2.zero; // stop any leftover "flick" movement
+                        // Keep our own exact position: one frame's step can be under one unit, and some lists
+                        // (ACHIEVEMENTS) round their position back every frame, which ate every tiny step (tested).
+                        // Start over from the list's real position when it is another list or was moved otherwise.
+                        float now = sr.verticalNormalizedPosition;
+                        if (sr != scrollList || Math.Abs(now - scrollPos) > 0.02f)
+                            scrollPos = now;
+                        scrollList = sr;
+                        scrollPos = Mathf.Clamp01(scrollPos + step);
+                        sr.verticalNormalizedPosition = scrollPos;
+                    }
+                }
             }
-            RectTransform view = sr.viewport != null ? sr.viewport : sr.transform.TryCast<RectTransform>();
-            float room = sr.content.rect.height - view.rect.height; // how far the list can move at all
-            if (room <= 0)
-                return;
-            // verticalNormalizedPosition: 1 = top, 0 = bottom. Stick up (positive) = towards the top.
-            float step = stickY * view.rect.height * Time.unscaledDeltaTime / room;
-            sr.velocity = Vector2.zero; // stop any leftover "flick" movement
-            sr.verticalNormalizedPosition = Mathf.Clamp01(sr.verticalNormalizedPosition + step);
+            // Sticky style (Voidmaster01): the cursor rides on the scrollbar's handle while the right stick scrolls,
+            // so it is plain to see what is scrolling, and the next push keeps scrolling the same list.
+            if (Sticky && used != null && used.handleRect != null)
+            {
+                Vector2 handle;
+                if (ScreenPoint(used.handleRect.transform, out handle))
+                    PlaceCursor(handle);
+            }
         }
 
         // Some of the game's screens (the ACHIEVEMENTS list) scroll with a plain Scrollbar that moves the list itself,
@@ -473,7 +507,8 @@ namespace ModConfigs
         // (0..1), so moving "size" per second at full tilt is one screenful per second, like the lists above.
         // top = what is under the cursor, or null when nothing there catches clicks (then every visible scrollbar on
         // screen is a candidate; a scrollbar on a switched-off screen doesn't count, isActiveAndEnabled checks that).
-        private static void ScrollBarFallback(GameObject top, float stickY)
+        // Returns the scrollbar it moved (or null).
+        private static Scrollbar ScrollBarFallback(GameObject top, float stickY)
         {
             Scrollbar bar = top != null ? top.GetComponentInParent<Scrollbar>() : null;
             if (bar == null && top != null)
@@ -485,12 +520,13 @@ namespace ModConfigs
             if (bar == null)
                 bar = FirstVerticalBar(UnityEngine.Object.FindObjectsOfType<Scrollbar>());
             if (bar == null)
-                return;
+                return null;
             float step = stickY * Mathf.Max(bar.size, 0.05f) * Time.unscaledDeltaTime;
             // BottomToTop: value 1 = the top of the list; TopToBottom: value 0 = the top. Stick up = towards the top.
             if (bar.direction == Scrollbar.Direction.TopToBottom)
                 step = -step;
             bar.value = Mathf.Clamp01(bar.value + step); // setting value moves the list, like dragging the bar
+            return bar;
         }
 
         // The first switched-on, up/down scrollbar in a list (on a screen whose canvas is showing), or null.
@@ -543,6 +579,9 @@ namespace ModConfigs
             Canvas.ForceUpdateCanvases(); // let Unity place everything at the new scroll position right now
             return true;
         }
+
+        private static ScrollRect scrollList; // the list the right stick scrolled last
+        private static float scrollPos;       // our exact position in it (1 = top, 0 = bottom)
 
         // The topmost UI element under a screen point (what a click there would hit), or null.
         private static GameObject TopHit(Vector2 point)
