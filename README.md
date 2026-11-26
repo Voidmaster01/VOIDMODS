@@ -6,7 +6,7 @@ Mods for **FNAF Online Multiplayer** by Brian_mpz, made by Voidmaster01, for [Me
 
 | Mod | What it does |
 |---|---|
-| **ModConfigs** | Adds a **MOD CONFIGS** row to the home screen menu: one in-game place for the settings of all your mods. Other mods can add their own page, and every mod's MelonPreferences settings get an automatic page. |
+| **ModConfigs** | Adds a **MOD CONFIGS** row to the home screen menu: one in-game place for the settings of all your mods. Other mods can add their own page, every mod's MelonPreferences settings get an automatic page, and mods that keep their settings in their own file (.ini .cfg .json .toml .yaml .xml ...) get one too. Search box and RESET TO DEFAULTS. Built-in **Key Binds** page: change the game's keys, play with an **Xbox / PlayStation / other controller**, and a **DANGER ZONE** to clear your save on purpose (typed phrase, countdown, automatic backup). It also turns off the game's easy-to-trigger *Hold D to clear Save Data*. |
 | **Voidcons** | Your own **player icon**, shown in the backer-icon spot on the character select screen. Pick any picture in the game, move and crop it into a round HD icon, and other Voidcons players see it. Needs ModConfigs. |
 | **ModMenu** | A **MODS** button on the home screen (under WHAT'S NEW): switch mods on and off, and **install and update approved mods** in game. Needs ModConfigs 1.1.0. |
 
@@ -23,7 +23,10 @@ Download from the **[Releases](../../releases)** page. **FULL** (every mod) is a
 
 1. Install [MelonLoader](https://melonwiki.xyz) 0.7 into the game folder and start the game once.
 2. Put the `.dll` files you picked in the game's `Mods` folder.
-3. Start the game. With ModConfigs, **MOD CONFIGS** is in the home screen menu.
+3. Start the game. With ModConfigs, **MOD CONFIGS** is in the home screen menu (key binds and controller: its
+   **Key Binds** page). With ModMenu, the **MODS** button sits under WHAT'S NEW.
+
+**Already using ModMenu?** It installs and updates the other mods for you: **MODS -> GET MODS**.
 
 To update, replace the `.dll` files with the ones from the newest release.
 
@@ -62,11 +65,20 @@ static void BuildPage(ConfigPage page)
     page.Header("Settings");
     page.Toggle("Fast mode", () => fast, v => fast = v);
     page.Number("Speed", () => speed, v => speed = v, 0.5, 0, 10);
+    page.Slider("Volume", () => volume, v => volume = v, 0, 100, "0", true);
+    page.TextBox("Nickname", () => nick, v => nick = v);
+    page.Choice("Mode", new[] { "Easy", "Hard" }, () => mode, v => mode = v);
+    page.ColorPicker("Tint", () => tint, v => tint = v);
     page.Button("Reset", ResetAll);
 }
 ```
 
-No code at all? Settings made with `MelonPreferences` show up automatically.
+Give your page a **RESET TO DEFAULTS** button with `ConfigHub.SetReset("MyMod", ResetAll);`. Need a whole panel of your
+own? `ModPanel.Open("My panel", BuildPage)` opens one in the same look (the Mod Menu uses it).
+
+No code at all? Settings made with `MelonPreferences` show up automatically, with the fitting row: text box for text,
+dropdown for an enum, color picker for a Color, slider for a value with a range. A settings file of your own
+(`UserData\...` or next to your mod) gets a page too, and ModConfigs keeps its comments and layout when it saves.
 
 ## Getting your mod into the Mod Menu
 
@@ -78,7 +90,8 @@ version needs a new submission. How the list works: [registry/README.md](registr
 ## Repo layout
 
 ```
-ModConfigs/   the MOD CONFIGS hub (ConfigHub API, UiKit look, PngReader, menu row, panel)
+ModConfigs/   the MOD CONFIGS hub (ConfigHub API, UiKit look, PngReader, menu row, panel, config files, key binds,
+              controller, danger zone + save backup, ModPanel)
 Voidcons/     player icons (networking, move-and-crop page, image compression, file picker)
 ModMenu/      the MODS button: installed mods on/off, GET MODS browser + updater
 registry/     mods.json, the approved mod list the Mod Menu reads (tools\add-mod.ps1 adds mods)
