@@ -66,13 +66,13 @@ namespace ModMenu
                     child.gameObject.SetActive(false); // the callout and anything else
             }
 
-            // 3. Just below the original. The button is drawn scaled up, so its size in layout units isn't its size on
-            //    screen. GetWorldCorners gives its real corners on screen (0 = bottom-left, 1 = top-left), so the copy
-            //    moves down by the real height plus a small gap.
+            // 3. Directly below the original, touching it (Voidmaster01: "it would look better"). The button is drawn
+            //    scaled up, so its size in layout units isn't its size on screen. GetWorldCorners gives its real corners
+            //    on screen (0 = bottom-left, 1 = top-left), so the copy moves down by exactly the real height.
             var corners = new Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppStructArray<Vector3>(4);
             original.GetComponent<RectTransform>().GetWorldCorners(corners);
             float height = corners[1].y - corners[0].y;
-            copy.transform.position = original.transform.position - new Vector3(0, height * 1.2f, 0);
+            copy.transform.position = original.transform.position - new Vector3(0, height, 0);
             MelonLogger.Msg("[ModMenu] MODS button added under WHAT'S NEW.");
         }
     }
