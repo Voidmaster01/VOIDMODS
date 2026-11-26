@@ -182,7 +182,7 @@ namespace ModConfigs
         // ================= items on the current screen: cameras, trackers, lures (keys the game doesn't have) ========
         // Voidmaster01: LT / RT go through the buttons of the open tab "top to bottom, left to right, from the top-left
         // one to the bottom-right one". The buttons are found by their kind (the game's own components):
-        //   Cameras          CameraSelectionButton (One..Nine): stepping SWITCHES the camera (its own Select()).
+        //   Cameras          CameraSelectionButton (One..Nine): in NUMBER order, and stepping SWITCHES the camera (Select()).
         //   Motion Detection TrackerButton, Audio Lure LureButton: stepping only MOVES THE CURSOR onto the button and
         //                    A (or a click) uses it, because using them costs power / lure uses.
         // Reading order: higher on screen first; buttons at about the same height (within 4% of the screen) count as
@@ -196,6 +196,11 @@ namespace ModConfigs
             if (Math.Abs(a.Point.y - b.Point.y) > row)
                 return b.Point.y.CompareTo(a.Point.y); // Unity's y grows upward: bigger y = higher = first
             return a.Point.x.CompareTo(b.Point.x);
+        }
+
+        private static int ByCameraNumber(Item a, Item b)
+        {
+            return ((int)a.Thing.Cast<CameraSelectionButton>().targetCameraName).CompareTo((int)b.Thing.Cast<CameraSelectionButton>().targetCameraName);
         }
 
         public static void NextItem() { StepItem(1); }
@@ -226,7 +231,10 @@ namespace ModConfigs
                 }
                 if (items.Count == 0)
                     return;
-                items.Sort(new Comparison<Item>(ReadingOrder));
+                // Cameras go by their number (One, Two ... Nine, Voidmaster01: "cameras always start from one"); the
+                // Janitor's trackers and lures go in reading order.
+                if (screen == ComputerScreen.Cameras) items.Sort(new Comparison<Item>(ByCameraNumber));
+                else items.Sort(new Comparison<Item>(ReadingOrder));
                 // Which item is the cursor on? -1 = none: then RT starts at the first, LT at the last.
                 int current = -1;
                 Vector2 cursor;
