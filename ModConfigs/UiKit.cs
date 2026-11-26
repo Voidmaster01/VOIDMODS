@@ -10,6 +10,8 @@
 //   UiKit.Box(area, UiKit.RowColor, true);                          // fill it with a bordered box
 //   UiKit.Text(area, "Hello", 24, UiKit.TextColor, TextAlignmentOptions.Center);
 //   RectTransform b = UiKit.Element(area, "Btn", ...);  UiKit.Button(b, "Click me", new Action(MyMethod), true);
+//   (1.1.0) UiKit.InputField(...) makes a text box, UiKit.Slider(...) a slider, and TryParseHex/ToHex turn
+//   colors into "#RRGGBB" text and back.
 //
 // UNITY UI IN SHORT
 //   Every UI piece is a GameObject with a RectTransform. anchorMin/anchorMax say which part of the parent it is
@@ -138,6 +140,120 @@ namespace ModConfigs
             img.raycastTarget = false;
             img.color = sprite != null ? Color.white : new Color(1, 1, 1, 0); // invisible when there's no sprite
             return img;
+        }
+
+        // ---- Text boxes and sliders (new in 1.1.0) ----
+
+        // Makes "target" a text box in the row style: click it, type, press Enter (or click elsewhere) and
+        // onDone gets the text. placeholder = grey hint shown while the box is empty.
+        // A TMP_InputField needs a few parts: a "viewport" that cuts off text wider than the box (RectMask2D),
+        // the text it edits (textComponent) and the hint (placeholder). Unity starts a component the moment it is
+        // added, before those parts are set, so the object is switched off (SetActive(false)) while it is put
+        // together and switched back on at the end.
+        public static TMP_InputField InputField(Transform target, string value, string placeholder, float fontSize, Action<string> onDone)
+        {
+            GameObject go = target.gameObject;
+            bool wasActive = go.activeSelf;
+            go.SetActive(false);
+            Image img = Box(target, Color.white, true);
+            RectTransform area = Fill(target, "TextArea");
+            area.sizeDelta = new Vector2(-28, -8); // 14 units of padding left and right, 4 top and bottom
+            area.gameObject.AddComponent<RectMask2D>();
+            TextMeshProUGUI hint = Text(area, placeholder ?? "", fontSize, DimText, TextAlignmentOptions.MidlineLeft);
+            TextMeshProUGUI text = Text(area, "", fontSize, TextColor, TextAlignmentOptions.MidlineLeft);
+            TMP_InputField input = go.AddComponent<TMP_InputField>();
+            input.targetGraphic = img;
+            ColorBlock colors = input.colors; // same hover colors as the buttons
+            colors.normalColor = RowColor;
+            colors.highlightedColor = RowHover;
+            colors.selectedColor = RowHover;
+            colors.pressedColor = Border;
+            colors.colorMultiplier = 1f;
+            input.colors = colors;
+            input.textViewport = area;
+            input.textComponent = text;
+            input.placeholder = hint;
+            if (Font != null)
+                input.fontAsset = Font;
+            input.pointSize = fontSize;
+            input.richText = false;          // typed "<b>" stays text instead of turning bold
+            input.customCaretColor = true;   // the blinking cursor in VOIDMODS purple
+            input.caretColor = Purple;
+            input.selectionColor = new Color(Purple.r, Purple.g, Purple.b, 0.35f);
+            input.text = value ?? "";        // set BEFORE the listener, so filling the box doesn't count as typing
+            if (onDone != null)
+                input.onEndEdit.AddListener(onDone);
+            go.SetActive(wasActive);
+            return input;
+        }
+
+        // Makes "target" a slider (a bar with a handle you drag). onChange gets each new value while dragging.
+        // Unity's Slider moves two things for us: the purple "fill" grows from the left up to the value, and the
+        // white "handle" sits on the value. We only have to make them and tell the Slider which is which.
+        public static Slider Slider(Transform target, float min, float max, float value, bool wholeNumbers, Action<float> onChange)
+        {
+            Box(target, new Color(0, 0, 0, 0.001f), false); // invisible, but catches clicks anywhere on the bar
+            Vector2 midLeft = new Vector2(0, 0.5f), midRight = new Vector2(1, 0.5f), center = new Vector2(0.5f, 0.5f);
+            RectTransform track = Element(target, "Track", midLeft, midRight, center, Vector2.zero, new Vector2(-20, 10));
+            Box(track, Border, false);
+            RectTransform fillArea = Element(target, "FillArea", midLeft, midRight, center, Vector2.zero, new Vector2(-20, 10));
+            RectTransform fill = Element(fillArea, "Fill", Vector2.zero, new Vector2(0, 1), midLeft, Vector2.zero, Vector2.zero);
+            Box(fill, Purple, false).raycastTarget = false;
+            RectTransform handleArea = Element(target, "HandleArea", Vector2.zero, Vector2.one, center, Vector2.zero, new Vector2(-20, 0));
+            RectTransform handle = Element(handleArea, "Handle", Vector2.zero, new Vector2(0, 1), center, Vector2.zero, new Vector2(16, -6));
+            Image knob = Box(handle, TextColor, false);
+            Slider slider = target.gameObject.AddComponent<Slider>();
+            slider.fillRect = fill;
+            slider.handleRect = handle;
+            slider.targetGraphic = knob;
+            slider.direction = UnityEngine.UI.Slider.Direction.LeftToRight;
+            slider.minValue = min;
+            slider.maxValue = max;
+            slider.wholeNumbers = wholeNumbers;
+            slider.SetValueWithoutNotify(value);
+            ColorBlock colors = slider.colors;
+            colors.normalColor = TextColor;
+            colors.highlightedColor = Purple;
+            colors.pressedColor = Purple;
+            colors.selectedColor = TextColor;
+            slider.colors = colors;
+            if (onChange != null)
+                slider.onValueChanged.AddListener(onChange);
+            return slider;
+        }
+
+        // ---- Colors as text ----
+
+        // Reads "#RRGGBB" or "#RRGGBBAA" (the # is optional): two hex digits (00..FF) per part.
+        public static bool TryParseHex(string text, out Color color)
+        {
+            color = Color.white;
+            string s = (text ?? "").Trim().TrimStart('#');
+            if (s.Length != 6 && s.Length != 8)
+                return false;
+            var parts = new float[4] { 1, 1, 1, 1 };
+            for (int i = 0; i < s.Length / 2; i++)
+            {
+                int v;
+                // NumberStyles.HexNumber reads "FF" as 255.
+                if (!int.TryParse(s.Substring(i * 2, 2), System.Globalization.NumberStyles.HexNumber, null, out v))
+                    return false;
+                parts[i] = v / 255f;
+            }
+            color = new Color(parts[0], parts[1], parts[2], parts[3]);
+            return true;
+        }
+
+        // The other way: a color -> "#RRGGBB", plus "AA" when it is see-through. "X2" = two hex digits.
+        public static string ToHex(Color c)
+        {
+            string hex = "#" + Part(c.r) + Part(c.g) + Part(c.b);
+            return c.a < 0.999f ? hex + Part(c.a) : hex;
+        }
+
+        private static string Part(float v)
+        {
+            return ((int)Math.Round(Math.Max(0f, Math.Min(1f, v)) * 255f)).ToString("X2");
         }
 
         // ---- Pictures ----
