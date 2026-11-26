@@ -9,7 +9,7 @@
 //     minigame. Only the rows of the role
 //     (and minigame) being played count, so outside a night the buttons press no game keys at all.
 //   - The mouse on the controller (cameras, buttons and Purple Guy need it): the left stick moves the cursor,
-//     A/Cross is a left click, the right stick scrolls. MENU CONTROL STYLE (Voidmaster01's idea): "Mouse (slippy)"
+//     A/Cross is a left click, the right stick scrolls the list under the cursor. MENU CONTROL STYLE (Voidmaster01's idea): "Mouse (slippy)"
 //     moves the cursor freely; "Controller (sticky)" makes each push of the stick jump the cursor onto the next
 //     button on screen in that direction (see StickyMove).
 //   - Menu buttons: Start/Options = go back / Settings (like Esc, see EscapeKey.cs); B/Circle does the same unless a
@@ -169,7 +169,7 @@ namespace ModConfigs
             }
         }
 
-        // The mouse's left button and wheel, the same way (one wheel notch = 120).
+        // The mouse's left button, the same way.
         private static void MouseButton(bool down)
         {
             Mouse m = Mouse.current;
@@ -177,12 +177,6 @@ namespace ModConfigs
                 QueueValue(m, m.leftButton, down ? 1f : 0f);
         }
 
-        private static void MouseScroll(float amount)
-        {
-            Mouse m = Mouse.current;
-            if (m != null)
-                QueueValue(m, m.scroll.y, amount);
-        }
         // Each button's state this frame (Now) and last frame (Before), read once per frame. "Just went down" =
         // Now and not Before. (Unity's own wasPressedThisFrame only works when the controller sends input events;
         // this works for every controller.)
@@ -206,7 +200,7 @@ namespace ModConfigs
         // ================= mouse and menu keys (every frame) =================
 
         private static bool clickDown;          // is our left click held right now?
-        private static float scrollLeft;        // scroll that wasn't sent yet (wheel steps are whole notches)
+
         private static Bind captureBind;        // the key bind row waiting for "press a button...", or null
         private static float captureStarted;
 
@@ -269,14 +263,10 @@ namespace ModConfigs
                 bool south = pad.buttonSouth.isPressed;
                 if (south && !clickDown) { MouseButton(true); clickDown = true; }
                 else if (!south) ReleaseClick();
-                // Scroll with the right stick (up/down). 120 = one wheel notch; it builds up until a whole notch.
+                // Scroll the list under the cursor with the right stick (up/down); see ScrollUnderCursor.
                 float y = pad.rightStick.ReadValue().y;
-                if (Math.Abs(y) > 0.3f)
-                {
-                    scrollLeft += y * Time.unscaledDeltaTime * 8f; // about 8 notches per second at full tilt
-                    int notches = (int)scrollLeft;
-                    if (notches != 0) { MouseScroll(notches * 120f); scrollLeft -= notches; }
-                }
+                if (Math.Abs(y) > 0.2f)
+                    ScrollUnderCursor(y);
                 // Menu buttons: once when the button goes down (Down() remembers last frame, see below).
                 if (Down(GamepadButton.Start, pad.startButton.isPressed)) EscapeKey.StartButton();
                 // B / Circle = back, like Esc (Voidmaster01), unless a key bind row of the current role / minigame uses B.
@@ -412,7 +402,11 @@ namespace ModConfigs
                 if (sel == null || !sel.isActiveAndEnabled || !sel.IsInteractable())
                     continue;
                 Vector2 c;
-                if (!ScreenCenter(sel, out c) || c.x < 0 || c.y < 0 || c.x > Screen.width || c.y > Screen.height)
+                if (!ScreenCenter(sel, out c))
+                    continue;
+                // Off the screen only counts for a button in a scrolling list (it can be scrolled into view).
+                bool onScreen = c.x >= 0 && c.y >= 0 && c.x <= Screen.width && c.y <= Screen.height;
+                if (!onScreen && sel.GetComponentInParent<ScrollRect>() == null)
                     continue;
                 Vector2 d = c - cursor;
                 float dist = d.magnitude;
@@ -426,11 +420,89 @@ namespace ModConfigs
             list.Sort(new Comparison<Candidate>(ByScore));
             for (int i = 0; i < list.Count && i < 12; i++)
             {
-                if (!Clickable(list[i].Item, list[i].Point))
-                    continue;
-                PlaceCursor(list[i].Point);
+                Vector2 point = list[i].Point;
+                if (!Clickable(list[i].Item, point))
+                {
+                    // Hidden because its list is scrolled away from it? Then scroll the list to show it (Voidmaster01:
+                    // sticky mode scrolls down by itself as the next button is chosen) and look again.
+                    if (!ScrollIntoView(list[i].Item) || !ScreenCenter(list[i].Item, out point) || !Clickable(list[i].Item, point))
+                        continue;
+                }
+                PlaceCursor(point);
                 return;
             }
+        }
+
+        // ================= scrolling lists (ScrollRect) =================
+        // Unity's scrolling lists (MOD CONFIGS' pages, the MODS panel, the game's own lists) are ScrollRects. Instead
+        // of faking the mouse wheel (which made pages jump from the top straight to the bottom), the right stick moves
+        // the list itself: at full tilt about one list-height per second, whatever the cursor speed is.
+
+        private static void ScrollUnderCursor(float stickY)
+        {
+            Vector2 cursor;
+            if (!CursorScreenPoint(out cursor))
+                return;
+            GameObject top = TopHit(cursor);
+            ScrollRect sr = top != null ? top.GetComponentInParent<ScrollRect>() : null;
+            if (sr == null || sr.content == null || !sr.vertical)
+                return;
+            RectTransform view = sr.viewport != null ? sr.viewport : sr.transform.TryCast<RectTransform>();
+            float room = sr.content.rect.height - view.rect.height; // how far the list can move at all
+            if (room <= 0)
+                return;
+            // verticalNormalizedPosition: 1 = top, 0 = bottom. Stick up (positive) = towards the top.
+            float step = stickY * view.rect.height * Time.unscaledDeltaTime / room;
+            sr.velocity = Vector2.zero; // stop any leftover "flick" movement
+            sr.verticalNormalizedPosition = Mathf.Clamp01(sr.verticalNormalizedPosition + step);
+        }
+
+        // If the element sits in a scrolling list that is visible but scrolled away from it, scrolls the list just
+        // enough to show it (with a small margin). True when it scrolled.
+        private static bool ScrollIntoView(Selectable sel)
+        {
+            ScrollRect sr = sel.GetComponentInParent<ScrollRect>();
+            if (sr == null || sr.content == null)
+                return false;
+            RectTransform view = sr.viewport != null ? sr.viewport : sr.transform.TryCast<RectTransform>();
+            RectTransform item = sel.transform.TryCast<RectTransform>();
+            if (view == null || item == null)
+                return false;
+            // The list itself must be the thing on top where it is (not hidden behind another panel).
+            Vector2 viewMid;
+            if (!ScreenPoint(view.transform, out viewMid))
+                return false;
+            GameObject hit = TopHit(viewMid);
+            if (hit == null || !hit.transform.IsChildOf(sr.transform))
+                return false;
+            // Compare heights in world space (works for flat and 3D canvases): corners 0 = bottom-left, 1 = top-left.
+            view.GetWorldCorners(corners);
+            float viewBottom = corners[0].y, viewTop = corners[1].y;
+            item.GetWorldCorners(corners);
+            float itemBottom = corners[0].y, itemTop = corners[1].y;
+            float margin = (itemTop - itemBottom) * 0.25f;
+            float move = 0f;
+            if (itemBottom < viewBottom) move = viewBottom - itemBottom + margin;  // below: move the content up
+            else if (itemTop > viewTop) move = viewTop - itemTop - margin;        // above: move the content down
+            else return false;                                                    // already in view
+            sr.velocity = Vector2.zero;
+            sr.content.position += new Vector3(0f, move, 0f);
+            sr.verticalNormalizedPosition = Mathf.Clamp01(sr.verticalNormalizedPosition); // stay inside the list
+            Canvas.ForceUpdateCanvases(); // let Unity place everything at the new scroll position right now
+            return true;
+        }
+
+        // The topmost UI element under a screen point (what a click there would hit), or null.
+        private static GameObject TopHit(Vector2 point)
+        {
+            EventSystem es = EventSystem.current;
+            if (es == null)
+                return null;
+            var data = new PointerEventData(es);
+            data.position = point;
+            var hits = new Il2CppSystem.Collections.Generic.List<RaycastResult>();
+            es.RaycastAll(data, hits);
+            return hits.Count > 0 ? hits[0].gameObject : null;
         }
 
         // The middle of an element in Unity screen pixels. Overlay canvases are already in screen pixels (camera
