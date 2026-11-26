@@ -198,6 +198,23 @@ namespace ModConfigs
             return a.Point.x.CompareTo(b.Point.x);
         }
 
+        // The cameras only the Security Office may see, read from the match's CameraData objects (one per camera).
+        // FindObjectsOfType walks the whole scene, so the answer is kept until the match changes.
+        private static HashSet<CameraName> securityOnly;
+        private static PlayerRoleManager securityOnlyFor;
+
+        private static HashSet<CameraName> SecurityOnlyCameras()
+        {
+            if (securityOnly != null && securityOnlyFor == manager)
+                return securityOnly;
+            securityOnly = new HashSet<CameraName>();
+            securityOnlyFor = manager;
+            foreach (CameraData d in UnityEngine.Object.FindObjectsOfType<CameraData>())
+                if (d != null && d.isSecurityOfficeOnly)
+                    securityOnly.Add(d.cameraName);
+            return securityOnly;
+        }
+
         private static int ByCameraNumber(Item a, Item b)
         {
             return ((int)a.Thing.Cast<CameraSelectionButton>().targetCameraName).CompareTo((int)b.Thing.Cast<CameraSelectionButton>().targetCameraName);
@@ -216,8 +233,11 @@ namespace ModConfigs
                 var items = new List<Item>();
                 if (screen == ComputerScreen.Cameras && computer.playerCameraSystem != null)
                 {
+                    // Some cameras are only for the Security Office (CameraData.isSecurityOfficeOnly); other roles skip them.
+                    HashSet<CameraName> hidden = Role == PlayerRoles.SecurityOffice ? null : SecurityOnlyCameras();
                     foreach (CameraSelectionButton b in computer.playerCameraSystem.GetComponentsInChildren<CameraSelectionButton>(false))
-                        AddItem(items, b);
+                        if (hidden == null || !hidden.Contains(b.targetCameraName))
+                            AddItem(items, b);
                 }
                 else if (screen == ComputerScreen.MotionDetection && computer.playerMotionDetectionSystem != null)
                 {
@@ -235,15 +255,22 @@ namespace ModConfigs
                 // Janitor's trackers and lures go in reading order.
                 if (screen == ComputerScreen.Cameras) items.Sort(new Comparison<Item>(ByCameraNumber));
                 else items.Sort(new Comparison<Item>(ReadingOrder));
-                // Which item is the cursor on? -1 = none: then RT starts at the first, LT at the last.
+                // Where are we now? Cameras: the camera being watched (the Cameras tab always opens on camera One, so
+                // RT goes to Two and LT to Nine). Trackers / lures: the button the cursor is on. -1 = none: then RT
+                // starts at the first, LT at the last.
                 int current = -1;
-                Vector2 cursor;
-                if (Controller.CursorScreenPoint(out cursor))
+                if (screen == ComputerScreen.Cameras)
+                {
                     for (int i = 0; i < items.Count; i++)
-                        if ((items[i].Point - cursor).magnitude < 40f) { current = i; break; }
-                if (current < 0 && screen == ComputerScreen.Cameras)
-                    for (int i = 0; i < items.Count; i++) // or the camera being watched
                         if (computer.playerCameraSystem.IsWatchingCamera(items[i].Thing.Cast<CameraSelectionButton>().targetCameraName)) { current = i; break; }
+                }
+                else
+                {
+                    Vector2 cursor;
+                    if (Controller.CursorScreenPoint(out cursor))
+                        for (int i = 0; i < items.Count; i++)
+                            if ((items[i].Point - cursor).magnitude < 40f) { current = i; break; }
+                }
                 int next = current < 0 ? (dir > 0 ? 0 : items.Count - 1) : (current + dir + items.Count) % items.Count; // % wraps around
                 Item pick = items[next];
                 if (screen == ComputerScreen.Cameras)
@@ -283,6 +310,8 @@ namespace ModConfigs
                         return;
                 }
                 CameraName want = (CameraName)(n - 1); // One = 0, Two = 1, ... (the enum's own order)
+                if (Role != PlayerRoles.SecurityOffice && SecurityOnlyCameras().Contains(want))
+                    return; // a Security-only camera: not for this role
                 foreach (CameraSelectionButton b in computer.playerCameraSystem.GetComponentsInChildren<CameraSelectionButton>(false))
                     if (b.targetCameraName == want)
                     {
