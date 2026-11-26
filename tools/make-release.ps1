@@ -24,7 +24,8 @@ New-Item -ItemType Directory -Force $out | Out-Null
 # The mods in this release: folder name, what it needs, and one line about it. Add new VOIDMODS here.
 $mods = @(
     [pscustomobject]@{ Name = 'ModConfigs';  Needs = '-';                   About = 'MOD CONFIGS settings hub on the home screen' },
-    [pscustomobject]@{ Name = 'Voidcons';    Needs = 'ModConfigs';          About = 'your own round HD player icon, picked and cropped in game' }
+    [pscustomobject]@{ Name = 'Voidcons';    Needs = 'ModConfigs';          About = 'your own round HD player icon, picked and cropped in game' },
+    [pscustomobject]@{ Name = 'ModMenu';     Needs = 'ModConfigs 1.1.0';    About = 'MODS button: switch mods on/off, install and update approved mods' }
 )
 
 foreach ($m in $mods) {
@@ -45,7 +46,7 @@ $install = @(
     ''
     '1. Install MelonLoader 0.7 into the game folder and start the game once.'
     '2. Copy the .dll files you want into the game''s Mods folder.'
-    '   Voidcons needs ModConfigs. ModConfigs works on its own.'
+    '   Voidcons and ModMenu need ModConfigs. ModConfigs works on its own.'
     '3. Start the game. With ModConfigs, MOD CONFIGS is in the home screen menu.'
     ''
     'Source code, license and updates: see the VOIDMODS repository on GitHub.'
@@ -75,3 +76,6 @@ Set-Content "$out\RELEASE-NOTES.md" ($notes -join "`n") -Encoding utf8
 
 Get-ChildItem $out | Select-Object Name, Length
 "Release folder: $out"
+# The Mod Menu installs only files whose fingerprint is in registry\mods.json, so every mod you re-release must be
+# approved again, or players' Mod Menus refuse the new file (see registry\README.md).
+'AFTER PUBLISHING: run tools\add-mod.ps1 -Url <new .dll link> for every mod you uploaded, then commit registry\mods.json.'

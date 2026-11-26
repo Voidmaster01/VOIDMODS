@@ -1,0 +1,60 @@
+name: Submit a mod
+description: Ask for your mod to be listed in the Mod Menu's GET MODS (Voidmaster01 checks every mod first).
+title: "[Mod] "
+labels: ["mod submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing your mod! Mods run with full access to the player's PC, so **every mod is checked by
+        hand before it is listed**. Mods with public source code are much faster to approve.
+        When it's approved, the Mod Menu installs the exact file you link below. A new version needs a new approval
+        (open a new submission with the new link).
+  - type: input
+    id: name
+    attributes:
+      label: Mod name
+      description: The name in your mod's [MelonInfo] line.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: download
+    attributes:
+      label: Direct download link of the .dll
+      description: A GitHub release asset link that ends in .dll (right-click the file on your release page -> Copy link).
+      placeholder: https://github.com/you/yourmod/releases/download/v1.0.0/YourMod.dll
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Source code
+      description: Link to the code (a GitHub repo). Strongly recommended.
+  - type: textarea
+    id: about
+    attributes:
+      label: What does it do?
+      description: One line for the GET MODS list, then anything else worth knowing.
+    validations:
+      required: true
+  - type: input
+    id: requires
+    attributes:
+      label: Other mods it needs
+      placeholder: "ModConfigs"
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Checks
+      options:
+        - label: I made this mod, or I have the author's permission to submit it.
+          required: true
+        - label: It doesn't steal data, cheat in multiplayer, harm other players, or touch files outside the game.
+          required: true

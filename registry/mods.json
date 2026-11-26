@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "mods": [
+    {
+      "id": "ModConfigs",
+      "name": "ModConfigs",
+      "author": "Voidmaster01",
+      "version": "1.0.0",
+      "about": "The MOD CONFIGS settings hub on the home screen: every mod's settings in one place.",
+      "file": "ModConfigs.dll",
+      "url": "https://github.com/Voidmaster01/VOIDMODS/releases/download/ModConfig/ModConfigs.dll",
+      "sha256": "5cc1981afdd9ddde2d464f8d0f6914cb00db7bc38b7f28414272d4f151c9e40a",
+      "requires": [],
+      "page": "https://github.com/Voidmaster01/VOIDMODS/releases/tag/ModConfig"
+    },
+    {
+      "id": "Voidcons",
+      "name": "Voidcons",
+      "author": "Voidmaster01",
+      "version": "1.0.0",
+      "about": "Your own round HD player icon, picked and cropped in game.",
+      "file": "Voidcons.dll",
+      "url": "https://github.com/Voidmaster01/VOIDMODS/releases/download/Voidcons/Voidcons.dll",
+      "sha256": "9818aba1adab7193dde24996b74da14496af50522d71da13d64f88d411023677",
+      "requires": [
+        "ModConfigs"
+      ],
+      "page": "https://github.com/Voidmaster01/VOIDMODS/releases/tag/Voidcons"
+    }
+  ]
+}

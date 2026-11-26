@@ -8,6 +8,7 @@ Mods for **FNAF Online Multiplayer** by Brian_mpz, made by Voidmaster01, for [Me
 |---|---|
 | **ModConfigs** | Adds a **MOD CONFIGS** row to the home screen menu: one in-game place for the settings of all your mods. Other mods can add their own page, and every mod's MelonPreferences settings get an automatic page. |
 | **Voidcons** | Your own **player icon**, shown in the backer-icon spot on the character select screen. Pick any picture in the game, move and crop it into a round HD icon, and other Voidcons players see it. Needs ModConfigs. |
+| **ModMenu** | A **MODS** button on the home screen (under WHAT'S NEW): switch mods on and off, and **install and update approved mods** in game. Needs ModConfigs 1.1.0. |
 
 ## Installing (players): pick your mods
 
@@ -18,6 +19,7 @@ Download from the **[Releases](../../releases)** page. **FULL** (every mod) is a
 |---|---|---|
 | The MOD CONFIGS settings hub | `ModConfigs.dll` | nothing else |
 | Your own player icon | `Voidcons.dll` | `ModConfigs.dll` |
+| Install, update and switch mods in game | `ModMenu.dll` | `ModConfigs.dll` (1.1.0 or newer) |
 
 1. Install [MelonLoader](https://melonwiki.xyz) 0.7 into the game folder and start the game once.
 2. Put the `.dll` files you picked in the game's `Mods` folder.
@@ -66,13 +68,22 @@ static void BuildPage(ConfigPage page)
 
 No code at all? Settings made with `MelonPreferences` show up automatically.
 
+## Getting your mod into the Mod Menu
+
+Open **[Issues -> New issue -> Submit a mod](../../issues/new?template=submit-mod.yml)** with a direct link to your
+release `.dll`. Voidmaster01 checks every mod by hand (public source code makes that much faster) and then adds it to
+`registry/mods.json`. The Mod Menu installs only the exact approved file, checked by its SHA-256 fingerprint, so each new
+version needs a new submission. How the list works: [registry/README.md](registry/README.md).
+
 ## Repo layout
 
 ```
 ModConfigs/   the MOD CONFIGS hub (ConfigHub API, UiKit look, PngReader, menu row, panel)
 Voidcons/     player icons (networking, move-and-crop page, image compression, file picker)
+ModMenu/      the MODS button: installed mods on/off, GET MODS browser + updater
+registry/     mods.json, the approved mod list the Mod Menu reads (tools\add-mod.ps1 adds mods)
 branding/     the VOIDMODS logo (.png embedded into ModConfigs, .ico for Windows)
-tools/        helper scripts: make-release.ps1 (release files for GitHub), make-patch.ps1 + patch_core.ps1
+tools/        helper scripts: make-release.ps1 (release files for GitHub), add-mod.ps1 (approve a mod), make-patch.ps1 + patch_core.ps1
               (one-click installer .bat), make-ico.ps1
 build.ps1     builds one mod;  build-all.ps1 builds all of them
 ```

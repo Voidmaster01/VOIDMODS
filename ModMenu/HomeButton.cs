@@ -4,6 +4,7 @@
 //   When the home screen starts, it finds the game's own WHAT'S NEW button (top right), makes a copy of it that
 //   LOOKS exactly the same (ModConfigs' UiKit.CopyLooks removes everything the original button does), writes "MODS"
 //   on it and places it just below WHAT'S NEW. Clicking it opens the MODS panel (ModMenuMod.OpenPanel).
+//   When mod updates are waiting it reads "MODS (n)".
 //   Voidmaster01 chose this spot: easy to see, and it doesn't cover the background art.
 
 using System;
@@ -21,6 +22,16 @@ namespace ModMenu
     internal static class HomeButton
     {
         private const string Name = "VoidmodsModsButton";
+        private static TMP_Text buttonLabel;
+
+        // Writes "MODS" or "MODS (n)" when n updates are waiting (Browser.Tick calls this after a check).
+        // "buttonLabel == null" is also true once Unity destroyed the label (leaving the home screen), so it's safe.
+        public static void SetCount(int updates)
+        {
+            if (buttonLabel == null)
+                return;
+            buttonLabel.text = updates > 0 ? "MODS (" + updates + ")" : "MODS";
+        }
 
         public static void Add(MainMenuUI menu)
         {
@@ -61,7 +72,10 @@ namespace ModMenu
                 Transform child = copy.transform.GetChild(i);
                 TMP_Text label = child.GetComponent<TMP_Text>();
                 if (label != null)
-                    label.text = "MODS";            // the button's own label
+                {
+                    buttonLabel = label;            // the button's own label: "MODS", or "MODS (2)" with 2 updates
+                    SetCount(Browser.UpdateCount());
+                }
                 else
                     child.gameObject.SetActive(false); // the callout and anything else
             }
