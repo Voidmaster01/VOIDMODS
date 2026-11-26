@@ -445,7 +445,12 @@ namespace ModConfigs
                 return;
             GameObject top = TopHit(cursor);
             if (top == null)
+            {
+                // Nothing that catches clicks under the cursor (like the empty parts of the ACHIEVEMENTS screen):
+                // look for a visible scrollbar anywhere instead.
+                ScrollBarFallback(null, stickY);
                 return;
+            }
             ScrollRect sr = top.GetComponentInParent<ScrollRect>();
             if (sr == null || sr.content == null || !sr.vertical)
             {
@@ -466,18 +471,19 @@ namespace ModConfigs
         // not with a ScrollRect. Then the stick moves that scrollbar: the one under the cursor, or else the first
         // switched-on vertical scrollbar on the same screen (canvas). Scrollbar.size = how much of the list is visible
         // (0..1), so moving "size" per second at full tilt is one screenful per second, like the lists above.
+        // top = what is under the cursor, or null when nothing there catches clicks (then every visible scrollbar on
+        // screen is a candidate; a scrollbar on a switched-off screen doesn't count, isActiveAndEnabled checks that).
         private static void ScrollBarFallback(GameObject top, float stickY)
         {
-            Scrollbar bar = top.GetComponentInParent<Scrollbar>();
-            if (bar == null)
+            Scrollbar bar = top != null ? top.GetComponentInParent<Scrollbar>() : null;
+            if (bar == null && top != null)
             {
                 Canvas canvas = top.GetComponentInParent<Canvas>();
                 if (canvas != null)
-                    foreach (Scrollbar b in canvas.rootCanvas.GetComponentsInChildren<Scrollbar>(false))
-                        if (b.isActiveAndEnabled && b.IsInteractable() &&
-                            (b.direction == Scrollbar.Direction.BottomToTop || b.direction == Scrollbar.Direction.TopToBottom))
-                        { bar = b; break; }
+                    bar = FirstVerticalBar(canvas.rootCanvas.GetComponentsInChildren<Scrollbar>(false));
             }
+            if (bar == null)
+                bar = FirstVerticalBar(UnityEngine.Object.FindObjectsOfType<Scrollbar>());
             if (bar == null)
                 return;
             float step = stickY * Mathf.Max(bar.size, 0.05f) * Time.unscaledDeltaTime;
@@ -485,6 +491,22 @@ namespace ModConfigs
             if (bar.direction == Scrollbar.Direction.TopToBottom)
                 step = -step;
             bar.value = Mathf.Clamp01(bar.value + step); // setting value moves the list, like dragging the bar
+        }
+
+        // The first switched-on, up/down scrollbar in a list (on a screen whose canvas is showing), or null.
+        private static Scrollbar FirstVerticalBar(Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppArrayBase<Scrollbar> bars)
+        {
+            foreach (Scrollbar b in bars)
+            {
+                if (b == null || !b.isActiveAndEnabled)
+                    continue;
+                if (b.direction != Scrollbar.Direction.BottomToTop && b.direction != Scrollbar.Direction.TopToBottom)
+                    continue;
+                Canvas c = b.GetComponentInParent<Canvas>();
+                if (c != null && c.rootCanvas.enabled)
+                    return b;
+            }
+            return null;
         }
 
         // If the element sits in a scrolling list that is visible but scrolled away from it, scrolls the list just
