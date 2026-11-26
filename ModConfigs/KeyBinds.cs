@@ -129,10 +129,9 @@ namespace ModConfigs
             Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
             Add(cat, s, Key.Space, "Open/close laptop", GamepadButton.North);
             Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
-            // No looking left/right while the laptop is open (Voidmaster01 tested it), so no A / D rows here.
+            // No looking left/right and no door while the laptop is open (Voidmaster01 tested it): only the laptop key.
             s = Section("PartsServiceMonitor", "Parts & Service: laptop open", PlayerRoles.PartsAndService, false, true, null);
             Add(cat, s, Key.Space, "Open/close laptop", GamepadButton.North);
-            Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
             Tabs(cat, s);
 
             s = Section("Motorist", "Parts & Service: Midnight Motorist (minigame)", PlayerRoles.PartsAndService, true, true,
