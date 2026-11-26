@@ -178,7 +178,7 @@ namespace ModConfigs
             // Purple Guy has no keys in the game: his screens open only with the mouse on the bars at the screen edges.
             // These two keys are ADDED by ModConfigs (Voidmaster01's defaults: A/D and LB/RB); see GameContext.cs.
             s = Section("PurpleGuy", "Purple Guy", PlayerRoles.PurpleGuy, false, "down",
-                "The game only has the mouse for these; ModConfigs adds the keys. They don't fire while you type in a text box.");
+                "They don't fire while you type in a text box.");
             Add(cat, s, Key.A, "Open/close left screen", GamepadButton.LeftShoulder).OnPress = new Action(GameContext.FlipPurpleLeft);
             Add(cat, s, Key.D, "Open/close right screen", GamepadButton.RightShoulder).OnPress = new Action(GameContext.FlipPurpleRight);
 
@@ -205,17 +205,17 @@ namespace ModConfigs
         private static void Tabs(MelonPreferences_Category cat, KeySection s, GamepadButton prev = GamepadButton.LeftShoulder,
             GamepadButton next = GamepadButton.RightShoulder, bool janitor = false)
         {
-            Add(cat, s, Key.Q, "Previous tab (added by ModConfigs)", prev).OnPress = new Action(GameContext.PreviousTab);
-            Add(cat, s, Key.E, "Next tab (added by ModConfigs)", next).OnPress = new Action(GameContext.NextTab);
+            Add(cat, s, Key.Q, "Previous tab", prev).OnPress = new Action(GameContext.PreviousTab);
+            Add(cat, s, Key.E, "Next tab", next).OnPress = new Action(GameContext.NextTab);
             // Cameras in number order, trackers / lures in reading order (Voidmaster01: LT / RT); see GameContext.StepItem.
             string things = janitor ? "tracker / lure" : "camera";
-            Add(cat, s, Key.Z, "Previous " + things + " (added)", GamepadButton.LeftTrigger).OnPress = new Action(GameContext.PreviousItem);
-            Add(cat, s, Key.C, "Next " + things + " (added)", GamepadButton.RightTrigger).OnPress = new Action(GameContext.NextItem);
+            Add(cat, s, Key.Z, "Previous " + things, GamepadButton.LeftTrigger).OnPress = new Action(GameContext.PreviousItem);
+            Add(cat, s, Key.C, "Next " + things, GamepadButton.RightTrigger).OnPress = new Action(GameContext.NextItem);
             if (!janitor)
                 return;
             // Stepping never fires a lure or a tracker (lures only work twice, trackers shouldn't stay on): this key
             // clicks the button the cursor is on. On a controller A / Cross is already that click, so no button here.
-            AddRow(cat, s, Key.F, "Use the selected lure / tracker (added)", "None").OnPress = new Action(Controller.ClickAtCursor);
+            AddRow(cat, s, Key.F, "Use the selected lure / tracker", "None").OnPress = new Action(Controller.ClickAtCursor);
         }
 
         // Number keys 1-9 (and the number pad) pick cameras while the Cameras tab is open; one switch for all roles.
@@ -467,7 +467,7 @@ namespace ModConfigs
             RectTransform row = page.Custom(70);
             UiKit.Box(row, UiKit.RowColor, true);
             RectTransform left = UiKit.Element(row, "Label", new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0.5f), new Vector2(20, 0), new Vector2(-500, -10));
-            string sub = b.OnPress != null ? "added by ModConfigs (the game has no key for this)" : "game key: " + Pretty(b.GameKey);
+            string sub = (b.OnPress != null ? "default: " : "game key: ") + Pretty(b.GameKey);
             TextMeshProUGUI text = UiKit.Text(left, b.What + "\n<size=15><color=#8c859e>" + sub + "</color></size>", 22, UiKit.TextColor, TextAlignmentOptions.MidlineLeft);
             text.overflowMode = TextOverflowModes.Ellipsis;
 
