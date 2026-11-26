@@ -9,11 +9,12 @@
 //   role uses (from the game's own TIPS screens and role cards, collected by Voidmaster01). The monitor-up section
 //   also has Q / E (LB / RB) for the previous / next laptop tab: keys the game doesn't have, ADDED by ModConfigs.
 //     Security Office        A close left door, D close right door, S flip monitor
-//     Parts & Service        A look left, D look right, Space open/close laptop, W open/close door ("laptop open")
+//     Parts & Service        A look left, D look right, W open/close door (laptop closed only), Space laptop
 //       Midnight Motorist    W A S D drive (the laptop's Games tab; the arrow keys always work too)
-//     Backstage              A look left, D look right, S shock, W open/close door. Its computer screen is always on,
-//                            so "monitor up" = while LOOKING at it ("at the computer screen" vs "looking around")
-//     Janitor's Closet       A open/close mask, D flip monitor
+//     Backstage              A look left, D look right; W door only while looking at the door, S shock only while
+//                            looking at the shock panel. Its screen is always on, so it has one section per VIEW:
+//                            door, shock panel, maintenance, computer screen (the "monitor up" one, with the tabs)
+//     Janitor's Closet       A open/close mask (monitor down only), D flip monitor
 //       Freddy in Space      Space fly (the laptop's Games tab)
 //     Purple Guy             A open/close left screen, D right screen: keys the game DOESN'T have (it only has the
 //                            mouse on the screen-edge bars), ADDED by ModConfigs (Voidmaster01's defaults, LB/RB too)
@@ -75,7 +76,7 @@ namespace ModConfigs
         public string Note;          // a dim line under the title (may be null)
         public PlayerRoles Role;
         public bool Minigame;        // true = applies on top of the role's section while the Games tab is open
-        public bool Monitor;         // true = applies while the monitor / laptop is up (Backstage: looking at its screen)
+        public string State;         // when it applies inside the role: "down" / "up" (monitor), Backstage: "door", "shock", "maintenance", "up"
         public readonly List<Bind> Binds = new List<Bind>();
     }
 
@@ -114,63 +115,67 @@ namespace ModConfigs
             // Every crew role has TWO sections (Voidmaster01's design): monitor down, and monitor up. The monitor-up one
             // also has the laptop tab keys. The ids of the monitor-down sections are the ones used before, so earlier
             // choices carry over. Monitor-up defaults: like monitor down, but LB/RB go to the tabs (doors on the D-pad).
-            s = Section("Security", "Security Office: monitor down", PlayerRoles.SecurityOffice, false, false, null);
+            s = Section("Security", "Security Office: monitor down", PlayerRoles.SecurityOffice, false, "down", null);
             Add(cat, s, Key.A, "Close left door", GamepadButton.LeftShoulder);
             Add(cat, s, Key.D, "Close right door", GamepadButton.RightShoulder);
             Add(cat, s, Key.S, "Flip monitor up/down", GamepadButton.North);
-            s = Section("SecurityMonitor", "Security Office: monitor up", PlayerRoles.SecurityOffice, false, true, null);
+            s = Section("SecurityMonitor", "Security Office: monitor up", PlayerRoles.SecurityOffice, false, "up", null);
             Add(cat, s, Key.A, "Close left door", GamepadButton.DpadLeft);
             Add(cat, s, Key.D, "Close right door", GamepadButton.DpadRight);
             Add(cat, s, Key.S, "Flip monitor up/down", GamepadButton.North);
             Tabs(cat, s);
 
-            s = Section("PartsService", "Parts & Service: laptop closed", PlayerRoles.PartsAndService, false, false, null);
+            s = Section("PartsService", "Parts & Service: laptop closed", PlayerRoles.PartsAndService, false, "down", null);
             Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
             Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
             Add(cat, s, Key.Space, "Open/close laptop", GamepadButton.North);
             Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
             // No looking left/right and no door while the laptop is open (Voidmaster01 tested it): only the laptop key.
-            s = Section("PartsServiceMonitor", "Parts & Service: laptop open", PlayerRoles.PartsAndService, false, true, null);
+            s = Section("PartsServiceMonitor", "Parts & Service: laptop open", PlayerRoles.PartsAndService, false, "up", null);
             Add(cat, s, Key.Space, "Open/close laptop", GamepadButton.North);
             Tabs(cat, s);
 
-            s = Section("Motorist", "Parts & Service: Midnight Motorist (minigame)", PlayerRoles.PartsAndService, true, true,
+            s = Section("Motorist", "Parts & Service: Midnight Motorist (minigame)", PlayerRoles.PartsAndService, true, "up",
                 "On top of \"laptop open\" while the Games tab is open. The arrow keys always drive too.");
             Add(cat, s, Key.W, "Drive up", GamepadButton.DpadUp);
             Add(cat, s, Key.A, "Drive left", GamepadButton.DpadLeft);
             Add(cat, s, Key.S, "Drive down", GamepadButton.DpadDown);
             Add(cat, s, Key.D, "Drive right", GamepadButton.DpadRight);
 
-            // Backstage's computer screen is always on, so "monitor up" = while you are LOOKING at it (its camera view
-            // is the monitor view; A/D turn you there), and "monitor down" = looking at the door, shock or maintenance.
-            s = Section("Backstage", "Backstage: looking around", PlayerRoles.Backstage, false, false,
-                "Door, shock and maintenance views.");
+            // Backstage's computer screen is always on, and it can only use the door or the shock while LOOKING straight
+            // at it (Voidmaster01 tested it). So Backstage has one section per view it can look at (A/D turn between them).
+            s = Section("BackstageDoor", "Backstage: at the door", PlayerRoles.Backstage, false, "door", null);
+            Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
+            Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
+            Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
+            s = Section("BackstageShock", "Backstage: at the shock panel", PlayerRoles.Backstage, false, "shock", null);
             Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
             Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
             Add(cat, s, Key.S, "Shock", GamepadButton.North);
-            Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
-            s = Section("BackstageMonitor", "Backstage: at the computer screen", PlayerRoles.Backstage, false, true,
+            s = Section("BackstageMaintenance", "Backstage: at maintenance", PlayerRoles.Backstage, false, "maintenance",
+                "The repair menu itself is used with the mouse / cursor.");
+            Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
+            Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
+            s = Section("BackstageMonitor", "Backstage: at the computer screen", PlayerRoles.Backstage, false, "up",
                 "Backstage's screen is always on: this applies while you are looking at it.");
             Add(cat, s, Key.A, "Look left", GamepadButton.DpadLeft);
             Add(cat, s, Key.D, "Look right", GamepadButton.DpadRight);
-            Add(cat, s, Key.S, "Shock", GamepadButton.North);
-            Add(cat, s, Key.W, "Open/close door", GamepadButton.West);
             Tabs(cat, s);
 
-            s = Section("Janitor", "Janitor's Closet: monitor down", PlayerRoles.Janitor, false, false, null);
+            s = Section("Janitor", "Janitor's Closet: monitor down", PlayerRoles.Janitor, false, "down", null);
             Add(cat, s, Key.A, "Open/close mask", GamepadButton.West);
             Add(cat, s, Key.D, "Flip monitor up/down", GamepadButton.North);
-            s = Section("JanitorMonitor", "Janitor's Closet: monitor up", PlayerRoles.Janitor, false, true, null);
-            Add(cat, s, Key.A, "Open/close mask", GamepadButton.West);
+            // No mask while the monitor is up (Voidmaster01 tested it).
+            s = Section("JanitorMonitor", "Janitor's Closet: monitor up", PlayerRoles.Janitor, false, "up", null);
             Add(cat, s, Key.D, "Flip monitor up/down", GamepadButton.North);
             Tabs(cat, s);
 
-            s = Section("FreddySpace", "Janitor: Freddy in Space (minigame)", PlayerRoles.Janitor, true, true,
-                "On top of \"monitor up\" while the Games tab is open. Your mask and monitor keys keep working.");
+            s = Section("FreddySpace", "Janitor: Freddy in Space (minigame)", PlayerRoles.Janitor, true, "up",
+                "On top of \"monitor up\" while the Games tab is open. Your monitor and tab keys keep working.");
             Add(cat, s, Key.Space, "Fly (hold)", GamepadButton.South);
             // Purple Guy has no keys in the game: his screens open only with the mouse on the bars at the screen edges.
             // These two keys are ADDED by ModConfigs (Voidmaster01's defaults: A/D and LB/RB); see GameContext.cs.
-            s = Section("PurpleGuy", "Purple Guy", PlayerRoles.PurpleGuy, false, false,
+            s = Section("PurpleGuy", "Purple Guy", PlayerRoles.PurpleGuy, false, "down",
                 "The game only has the mouse for these; ModConfigs adds the keys. They don't fire while you type in a text box.");
             Add(cat, s, Key.A, "Open/close left screen", GamepadButton.LeftShoulder).OnPress = new Action(GameContext.FlipPurpleLeft);
             Add(cat, s, Key.D, "Open/close right screen", GamepadButton.RightShoulder).OnPress = new Action(GameContext.FlipPurpleRight);
@@ -180,10 +185,11 @@ namespace ModConfigs
             Rebuild();
         }
 
-        // monitor: true = the section applies while the monitor / laptop is up (minigames always sit on "up").
-        private static KeySection Section(string id, string title, PlayerRoles role, bool minigame, bool monitor, string note)
+        // state: when the section applies inside the role (GameContext.State): "down" / "up" for the monitor, and for
+        // Backstage the view it looks at. Minigames always sit on "up".
+        private static KeySection Section(string id, string title, PlayerRoles role, bool minigame, string state, string note)
         {
-            var s = new KeySection { Id = id, Title = title, Role = role, Minigame = minigame, Monitor = monitor, Note = note };
+            var s = new KeySection { Id = id, Title = title, Role = role, Minigame = minigame, State = state, Note = note };
             sections.Add(s);
             return s;
         }
@@ -227,9 +233,9 @@ namespace ModConfigs
             PlayerRoles role = GameContext.Role;
             if (role == PlayerRoles.None)
                 return;
-            bool up = GameContext.MonitorUp;
+            string state = GameContext.State;
             foreach (KeySection s in sections)
-                if (s.Role == role && !s.Minigame && s.Monitor == up)
+                if (s.Role == role && !s.Minigame && s.State == state)
                     foreach (Bind b in s.Binds)
                     {
                         if (b.OnPress != null) actions.Add(b); // added keys never change the game's own key answers
@@ -449,7 +455,7 @@ namespace ModConfigs
             var rows = new List<Bind>(s.Binds);
             if (s.Minigame)
                 foreach (KeySection r in sections)
-                    if (r.Role == s.Role && !r.Minigame && r.Monitor) // the monitor-up section it sits on
+                    if (r.Role == s.Role && !r.Minigame && r.State == "up") // the monitor-up section it sits on
                         foreach (Bind b in r.Binds)
                             if (s.Binds.Find(new Predicate<Bind>(new SameGameKey(b.GameKey).Matches)) == null)
                                 rows.Add(b);

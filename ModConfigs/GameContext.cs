@@ -38,8 +38,12 @@ namespace ModConfigs
 
         public static PlayerRoles Role { get; private set; } = PlayerRoles.None;
         public static bool InMinigame { get; private set; }
-        // True while a crew role's monitor / laptop is up (Backstage: looking at its always-on computer screen).
-        public static bool MonitorUp { get; private set; }
+        // Which set of keys applies inside the role (KeySection.State in KeyBinds.cs):
+        //   "down" / "up"  the monitor / laptop is down or up (Purple Guy is always "down": he has no such monitor)
+        //   Backstage, whose screen is always on, by what it is LOOKING at: "door", "shock", "maintenance", or "up"
+        //   (the computer screen). Backstage can only use the door or the shock while looking straight at it.
+        public static string State { get; private set; } = "down";
+        public static bool MonitorUp { get { return State == "up"; } }
         private static PlayerComputer computer; // the local player's laptop / monitor, for the tab keys
 
         // Raised (from Tick, on the main thread) when Role or InMinigame changed.
@@ -58,7 +62,8 @@ namespace ModConfigs
                 return;
             nextCheck = Time.unscaledTime + 0.1f;
             PlayerRoles role = PlayerRoles.None;
-            bool minigame = false, monitorUp = false;
+            bool minigame = false;
+            string state = "down";
             PlayerComputer pc = null;
             // "manager == null" is also true once Unity destroyed it (the match ended), see UnityEngine.Object.
             if (manager != null)
@@ -76,16 +81,16 @@ namespace ModConfigs
                             if (pc != null)
                             {
                                 // Monitor up: the computer's own isMonitorUp flag. Backstage's screen is always on
-                                // (isMonitorAlwaysUp), so for Backstage "up" = its camera is on the monitor view.
+                                // (isMonitorAlwaysUp), so for Backstage the state is the camera view it looks at.
                                 if (pc.isMonitorAlwaysUp)
                                 {
                                     BackstagePlayerBehaviour bs = me.TryCast<BackstagePlayerBehaviour>();
-                                    monitorUp = bs != null && bs.backstageCameraController != null
-                                        && bs.backstageCameraController.currentView.Value == BackstageCameraController_View.MonitorView;
+                                    if (bs != null && bs.backstageCameraController != null)
+                                        state = BackstageState(bs.backstageCameraController.currentView.Value);
                                 }
                                 else
-                                    monitorUp = pc.isMonitorUp.Value;
-                                minigame = monitorUp && (role == PlayerRoles.PartsAndService || role == PlayerRoles.Janitor) && pc.IsWatchingSystem(ComputerScreen.Games);
+                                    state = pc.isMonitorUp.Value ? "up" : "down";
+                                minigame = state == "up" && (role == PlayerRoles.PartsAndService || role == PlayerRoles.Janitor) && pc.IsWatchingSystem(ComputerScreen.Games);
                             }
                         }
                     }
@@ -95,23 +100,35 @@ namespace ModConfigs
                     // Between rounds the manager can be half torn down; act as "no role" and try again next time.
                     if (!warned) { warned = true; MelonLogger.Warning("[ModConfigs] Couldn't read the role (keys stay as the game has them): " + e.Message); }
                     role = PlayerRoles.None;
-                    minigame = monitorUp = false;
+                    minigame = false;
+                    state = "down";
                     pc = null;
                 }
             }
             computer = pc;
-            if (role == Role && minigame == InMinigame && monitorUp == MonitorUp)
+            if (role == Role && minigame == InMinigame && state == State)
                 return;
             Role = role;
             InMinigame = minigame;
-            MonitorUp = monitorUp;
+            State = state;
             MelonLogger.Msg("[ModConfigs] Key binds now: " + (role == PlayerRoles.None ? "none (the game's own keys)"
-                : role + (monitorUp ? " + monitor up" : "") + (minigame ? " + minigame" : "")));
+                : role + " (" + state + ")" + (minigame ? " + minigame" : "")));
             if (Changed != null)
                 Changed();
         }
 
         private static bool warned;
+
+        private static string BackstageState(BackstageCameraController_View view)
+        {
+            switch (view)
+            {
+                case BackstageCameraController_View.MonitorView: return "up";
+                case BackstageCameraController_View.DoorView: return "door";
+                case BackstageCameraController_View.ShockView: return "shock";
+                default: return "maintenance";
+            }
+        }
 
         // ================= Purple Guy's screens (keys the game doesn't have) =================
         // Purple Guy opens his left and right screens only by touching the bars at the screen edges with the mouse.
