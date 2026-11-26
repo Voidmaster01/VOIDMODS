@@ -6,6 +6,7 @@
 //             spectating: then the game's keys are never changed).
 //   Minigame: true while the player looks at the laptop's Games tab (Midnight Motorist for Parts & Service, Freddy in
 //             Space for the Janitor).
+//   Laptop:   true while a crew role's laptop / monitor is open on any tab (for the tab-switching keys).
 //   Every change is written to the log ("[ModConfigs] Key binds now: Janitor's Closet + minigame") for bug reports.
 //   It also opens Purple Guy's left/right screens for the keys ModConfigs adds for him (see the end of this file),
 //   and tells when the player is typing in a text box.
@@ -36,6 +37,15 @@ namespace ModConfigs
 
         public static PlayerRoles Role { get; private set; } = PlayerRoles.None;
         public static bool InMinigame { get; private set; }
+        // True while a crew role's laptop / monitor is open on any tab (Cameras, Comms, Games, Manual, Wordle...).
+        public static bool LaptopOpen { get; private set; }
+        private static PlayerComputer computer; // the local player's laptop / monitor, for the tab keys
+
+        private static readonly ComputerScreen[] Screens =
+        {
+            ComputerScreen.Cameras, ComputerScreen.Comms, ComputerScreen.MotionDetection, ComputerScreen.AudioLure,
+            ComputerScreen.Games, ComputerScreen.Manual, ComputerScreen.Wordle,
+        };
 
         // Raised (from Tick, on the main thread) when Role or InMinigame changed.
         public static event Action Changed;
@@ -53,7 +63,8 @@ namespace ModConfigs
                 return;
             nextCheck = Time.unscaledTime + 0.1f;
             PlayerRoles role = PlayerRoles.None;
-            bool minigame = false;
+            bool minigame = false, laptop = false;
+            PlayerComputer pc = null;
             // "manager == null" is also true once Unity destroyed it (the match ended), see UnityEngine.Object.
             if (manager != null)
             {
@@ -63,11 +74,17 @@ namespace ModConfigs
                     {
                         foreach (PlayerRoles r in Roles)
                             if (manager.IsRole(r)) { role = r; break; }
-                        if (role == PlayerRoles.PartsAndService || role == PlayerRoles.Janitor)
+                        if (role != PlayerRoles.None && role != PlayerRoles.PurpleGuy)
                         {
                             PlayerBehaviour me = manager.GetLocalPlayerBehaviour();
-                            PlayerComputer pc = me != null ? me.playerComputer : null;
-                            minigame = pc != null && pc.IsWatchingSystem(ComputerScreen.Games);
+                            pc = me != null ? me.playerComputer : null;
+                            if (pc != null)
+                            {
+                                // IsWatchingSystem(tab) = the laptop / monitor is open on that tab.
+                                foreach (ComputerScreen sc in Screens)
+                                    if (pc.IsWatchingSystem(sc)) { laptop = true; break; }
+                                minigame = (role == PlayerRoles.PartsAndService || role == PlayerRoles.Janitor) && pc.IsWatchingSystem(ComputerScreen.Games);
+                            }
                         }
                     }
                 }
@@ -76,14 +93,18 @@ namespace ModConfigs
                     // Between rounds the manager can be half torn down; act as "no role" and try again next time.
                     if (!warned) { warned = true; MelonLogger.Warning("[ModConfigs] Couldn't read the role (keys stay as the game has them): " + e.Message); }
                     role = PlayerRoles.None;
-                    minigame = false;
+                    minigame = laptop = false;
+                    pc = null;
                 }
             }
-            if (role == Role && minigame == InMinigame)
+            computer = pc;
+            if (role == Role && minigame == InMinigame && laptop == LaptopOpen)
                 return;
             Role = role;
             InMinigame = minigame;
-            MelonLogger.Msg("[ModConfigs] Key binds now: " + (role == PlayerRoles.None ? "none (the game's own keys)" : role + (minigame ? " + minigame" : "")));
+            LaptopOpen = laptop;
+            MelonLogger.Msg("[ModConfigs] Key binds now: " + (role == PlayerRoles.None ? "none (the game's own keys)"
+                : role + (laptop ? " + laptop" : "") + (minigame ? " + minigame" : "")));
             if (Changed != null)
                 Changed();
         }
@@ -113,6 +134,28 @@ namespace ModConfigs
             catch (Exception e)
             {
                 MelonLogger.Warning("[ModConfigs] Couldn't flip Purple Guy's screen: " + e.Message);
+            }
+        }
+
+        // ================= laptop / monitor tabs (keys the game doesn't have) =================
+        // The tab bar at the top of the laptop (Cameras, Comms, Games, Manual, Wordle...) is mouse-only in the game.
+        // PlayerComputer.NextScreen / PreviousScreen are the game's own "go to the next / previous tab" functions.
+
+        public static void NextTab() { Tab(true); }
+        public static void PreviousTab() { Tab(false); }
+
+        private static void Tab(bool next)
+        {
+            if (!LaptopOpen || computer == null)
+                return;
+            try
+            {
+                if (next) computer.NextScreen();
+                else computer.PreviousScreen();
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Warning("[ModConfigs] Couldn't change the laptop tab: " + e.Message);
             }
         }
 

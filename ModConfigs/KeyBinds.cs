@@ -13,6 +13,8 @@
 //     Backstage              A look left, D look right, S shock, W open/close door
 //     Janitor's Closet       A open/close mask, D flip monitor
 //       Freddy in Space      Space fly (the laptop's Games tab)
+//     Laptop / monitor tabs  Q previous tab, E next tab (LB/RB): ADDED keys, every crew role, while the laptop or
+//                            monitor is open; their buttons win over the role's buttons then
 //     Purple Guy             A open/close left screen, D right screen: keys the game DOESN'T have (it only has the
 //                            mouse on the screen-edge bars), ADDED by ModConfigs (Voidmaster01's defaults, LB/RB too)
 //   Every row has a keyboard key and a controller button. GameContext.cs tells which section applies right now:
@@ -73,6 +75,7 @@ namespace ModConfigs
         public string Note;          // a dim line under the title (may be null)
         public PlayerRoles Role;
         public bool Minigame;        // true = applies on top of the role's section while the Games tab is open
+        public bool Laptop;          // true = applies to every crew role while the laptop / monitor is open
         public readonly List<Bind> Binds = new List<Bind>();
     }
 
@@ -140,6 +143,15 @@ namespace ModConfigs
                 "While the laptop's Games tab is open. Your mask and monitor keys keep working.");
             Add(cat, s, Key.Space, "Fly (hold)", GamepadButton.South);
 
+            // The laptop / monitor tab bar is mouse-only in the game; these keys are ADDED (Voidmaster01: LB/RB).
+            // While the laptop is open its buttons win over the role's (see Rebuild), so LB/RB change tabs then.
+            s = Section("Laptop", "Laptop / monitor tabs (every crew role)", PlayerRoles.None, false,
+                "While your laptop or monitor is open. These buttons win over your role's buttons then (Security: close the doors "
+                + "with the keyboard keys while the monitor is up, or give them other buttons).");
+            s.Laptop = true;
+            Add(cat, s, Key.Q, "Previous tab", GamepadButton.LeftShoulder).OnPress = new Action(GameContext.PreviousTab);
+            Add(cat, s, Key.E, "Next tab", GamepadButton.RightShoulder).OnPress = new Action(GameContext.NextTab);
+
             // Purple Guy has no keys in the game: his screens open only with the mouse on the bars at the screen edges.
             // These two keys are ADDED by ModConfigs (Voidmaster01's defaults: A/D and LB/RB); see GameContext.cs.
             s = Section("PurpleGuy", "Purple Guy", PlayerRoles.PurpleGuy, false,
@@ -186,9 +198,19 @@ namespace ModConfigs
             active.Clear();
             remap.Clear();
             actions.Clear();
+            blockedPads.Clear();
             PlayerRoles role = GameContext.Role;
             if (role == PlayerRoles.None)
                 return;
+            // The laptop tab keys first: their controller buttons are then "taken" while the laptop is open.
+            if (GameContext.LaptopOpen)
+                foreach (KeySection s in sections)
+                    if (s.Laptop)
+                        foreach (Bind b in s.Binds)
+                        {
+                            actions.Add(b);
+                            if (b.PadEntry.Value != "None") blockedPads.Add(b.PadEntry.Value);
+                        }
             foreach (KeySection s in sections)
                 if (s.Role == role && !s.Minigame)
                     foreach (Bind b in s.Binds)
@@ -215,6 +237,10 @@ namespace ModConfigs
         // The added-key rows that apply right now (Purple Guy's screens); Tick and Controller.Tick run their OnPress.
         private static readonly List<Bind> actions = new List<Bind>();
         internal static List<Bind> ActiveActions { get { return actions; } }
+
+        // Controller buttons taken by the laptop tab keys while the laptop is open: the role's rows don't use them then.
+        private static readonly HashSet<string> blockedPads = new HashSet<string>();
+        internal static bool PadTaken(Bind b) { return b.OnPress == null && blockedPads.Contains(b.PadEntry.Value); }
 
         // Runs an added key's action, unless the player is typing in a text box.
         internal static void Press(Bind b)
