@@ -106,7 +106,12 @@ namespace ModConfigs
             {
                 GamepadButton btn;
                 if (ButtonFor(b, out btn) && Snapshot(pad, btn).Now)
+                {
                     wanted[b.GameKey] = KeyBinds.Chosen(b);
+                    if (!held.ContainsKey(b.GameKey)) // just went down: one log line per press (bug reports)
+                        MelonLogger.Msg("[ModConfigs] Controller: " + Pretty(b.PadEntry.Value) + " -> " + KeyBinds.Pretty(KeyBinds.Chosen(b))
+                            + " sent (" + b.Section.Title + ": " + b.What + "), game window in front: " + Application.isFocused);
+                }
             }
             // 2. Let go of keys that are no longer wanted (or that changed). The loop walks a copy (new List(held)),
             //    because a Dictionary can't be changed while a foreach walks through it.
@@ -191,10 +196,108 @@ namespace ModConfigs
             if (s.Frame != Time.frameCount) // first look at this button in this frame
             {
                 s.Before = s.Now;
-                s.Now = pad[b].isPressed;
+                s.Now = Pressed(b); // on ANY connected controller (see Pressed)
                 s.Frame = Time.frameCount;
             }
             return s;
+        }
+
+        // ================= reading ALL controllers =================
+        // Gamepad.all lists every controller Unity knows. A button counts as pressed when it is pressed on ANY of
+        // them; a stick is read from whichever controller pushes it furthest. So an extra, idle "gamepad" (some PCs
+        // get one from the Xbox app's Synthetic Gamepad Bus) can never hide the real controller, and a controller that
+        // was unplugged and plugged back in is simply in the list again. Nothing is remembered between frames.
+
+        private static bool Pressed(GamepadButton b)
+        {
+            for (int i = 0; i < Gamepad.all.Count; i++)
+            {
+                Gamepad g = Gamepad.all[i];
+                if (g == null)
+                    continue;
+                try { if (g[b].isPressed) return true; }
+                catch { } // a controller without that button
+            }
+            return false;
+        }
+
+        private static Vector2 Stick(bool left)
+        {
+            Vector2 best = Vector2.zero;
+            for (int i = 0; i < Gamepad.all.Count; i++)
+            {
+                Gamepad g = Gamepad.all[i];
+                if (g == null)
+                    continue;
+                Vector2 v = left ? g.leftStick.ReadValue() : g.rightStick.ReadValue();
+                if (v.sqrMagnitude > best.sqrMagnitude)
+                    best = v;
+            }
+            return best;
+        }
+
+        private static readonly GamepadButton[] Watched =
+        {
+            GamepadButton.South, GamepadButton.East, GamepadButton.West, GamepadButton.North, GamepadButton.LeftShoulder,
+            GamepadButton.RightShoulder, GamepadButton.LeftTrigger, GamepadButton.RightTrigger, GamepadButton.Start,
+            GamepadButton.Select, GamepadButton.DpadUp, GamepadButton.DpadDown, GamepadButton.DpadLeft, GamepadButton.DpadRight,
+        };
+
+        private static bool AnyButtonDown()
+        {
+            foreach (GamepadButton b in Watched)
+                if (Pressed(b)) return true;
+            return false;
+        }
+
+        // ================= diagnostics for bug reports =================
+        // Once a second: if the list of input devices changed (added, removed, reconnected), write the whole list to
+        // the log: name, layout (Unity's device type), id, and which gamepad Unity calls "current". Also, the first
+        // time each controller sends a button, say so.
+        private static string lastDevices = "";
+        private static float nextDeviceCheck, nextUnfocusedLog;
+        private static readonly HashSet<int> heardFrom = new HashSet<int>();
+
+        private static void WatchDevices()
+        {
+            if (Time.unscaledTime >= nextDeviceCheck)
+            {
+                nextDeviceCheck = Time.unscaledTime + 1f;
+                var sb = new System.Text.StringBuilder();
+                var devices = InputSystem.devices;
+                for (int i = 0; i < devices.Count; i++)
+                {
+                    InputDevice d = devices[i];
+                    if (d != null)
+                        sb.Append("\n    ").Append(d.displayName).Append("  [layout ").Append(d.layout).Append(", id ").Append(d.deviceId)
+                          .Append(d.TryCast<Gamepad>() != null ? ", GAMEPAD" : "").Append("]");
+                }
+                string now = sb.ToString();
+                if (now != lastDevices)
+                {
+                    lastDevices = now;
+                    Gamepad cur = Gamepad.current;
+                    MelonLogger.Msg("[ModConfigs] Input devices (" + Gamepad.all.Count + " gamepads; ModConfigs reads all of them; Unity's current: "
+                        + (cur != null ? cur.displayName + " id " + cur.deviceId : "none") + "):" + now);
+                }
+            }
+            for (int i = 0; i < Gamepad.all.Count; i++)
+            {
+                Gamepad g = Gamepad.all[i];
+                if (g == null || heardFrom.Contains(g.deviceId))
+                    continue;
+                foreach (GamepadButton b in Watched)
+                {
+                    bool down;
+                    try { down = g[b].isPressed; } catch { continue; }
+                    if (!down)
+                        continue;
+                    heardFrom.Add(g.deviceId);
+                    MelonLogger.Msg("[ModConfigs] Controller: first button from " + g.displayName + " (id " + g.deviceId + "): " + NameOf(b)
+                        + ", game window in front: " + Application.isFocused);
+                    break;
+                }
+            }
         }
 
         // ================= mouse and menu keys (every frame) =================
@@ -212,9 +315,12 @@ namespace ModConfigs
                 releaseClickNextFrame = false;
                 MouseButton(false);
             }
-            Gamepad pad = Gamepad.current;
-            if (pad == null)
+            WatchDevices(); // logs the device list when it changes (bug reports)
+            // Every connected controller is read, not just Gamepad.current: a friend's PC had an extra, idle gamepad
+            // (Xbox app's "Synthetic Gamepad Bus") that Unity kept as "current", so her real controller was ignored.
+            if (Gamepad.all.Count == 0)
                 return;
+            Gamepad pad = Gamepad.current; // only passed along; the reads below use Pressed / Stick (all pads)
             KeyBinds.Bypass = true; // our own reads of the controller must not be remapped
             try
             {
@@ -241,6 +347,11 @@ namespace ModConfigs
                 }
                 if (!Enabled || !GameHasFocus())
                 {
+                    if (Enabled && AnyButtonDown() && Time.unscaledTime > nextUnfocusedLog)
+                    {
+                        nextUnfocusedLog = Time.unscaledTime + 5f;
+                        MelonLogger.Msg("[ModConfigs] Controller: buttons pressed, but the game window is not in front (Application.isFocused = false), so they are ignored.");
+                    }
                     ReleaseClick();
                     ReleaseKeys();
                     return;
@@ -260,18 +371,18 @@ namespace ModConfigs
                 if (Sticky) StickyMove(pad);
                 else MoveCursor(pad);
                 // Left click on A / Cross: press when the button goes down, release when it comes up.
-                bool south = pad.buttonSouth.isPressed;
+                bool south = Pressed(GamepadButton.South);
                 if (south && !clickDown) { MouseButton(true); clickDown = true; }
                 else if (!south) ReleaseClick();
                 // Scroll the list under the cursor with the right stick (up/down); see ScrollUnderCursor.
-                float y = pad.rightStick.ReadValue().y;
+                float y = Stick(false).y;
                 if (Math.Abs(y) > 0.2f)
                     ScrollUnderCursor(y);
                 // Menu buttons: once when the button goes down (Down() remembers last frame, see below).
-                if (Down(GamepadButton.Start, pad.startButton.isPressed)) EscapeKey.StartButton();
+                if (Down(GamepadButton.Start, Pressed(GamepadButton.Start))) EscapeKey.StartButton();
                 // B / Circle = back, like Esc (Voidmaster01), unless a key bind row of the current role / minigame uses B.
-                if (Down(GamepadButton.East, pad.buttonEast.isPressed) && !InUse("East")) EscapeKey.StartButton();
-                if (Down(GamepadButton.Select, pad.selectButton.isPressed)) ToggleChat();
+                if (Down(GamepadButton.East, Pressed(GamepadButton.East)) && !InUse("East")) EscapeKey.StartButton();
+                if (Down(GamepadButton.Select, Pressed(GamepadButton.Select))) ToggleChat();
             }
             finally
             {
@@ -327,7 +438,7 @@ namespace ModConfigs
 
         private static void MoveCursor(Gamepad pad)
         {
-            Vector2 s = pad.leftStick.ReadValue();
+            Vector2 s = Stick(true);
             float len = s.magnitude;
             if (len < 0.15f) // dead zone: sticks never rest exactly at 0
                 return;
@@ -371,7 +482,7 @@ namespace ModConfigs
 
         private static void StickyMove(Gamepad pad)
         {
-            Vector2 s = pad.leftStick.ReadValue();
+            Vector2 s = Stick(true);
             if (s.magnitude < 0.5f)
             {
                 stickOut = false;
@@ -708,7 +819,7 @@ namespace ModConfigs
                 {
                     foreach (GamepadButton b in Enum.GetValues(typeof(GamepadButton)))
                     {
-                        try { if (pad[b].isPressed) wasDown.Add(b); } catch { }
+                        if (Pressed(b)) wasDown.Add(b);
                     }
                 }
                 finally { KeyBinds.Bypass = false; }
@@ -723,9 +834,7 @@ namespace ModConfigs
                 return;
             foreach (GamepadButton b in Enum.GetValues(typeof(GamepadButton)))
             {
-                ButtonControl c;
-                try { c = pad[b]; } catch { continue; }
-                if (c == null || !Down(b, c.isPressed))
+                if (!Down(b, Pressed(b)))
                     continue;
                 Bind row = captureBind;
                 captureBind = null;
@@ -782,9 +891,12 @@ namespace ModConfigs
         public static void BuildSection(ConfigPage page)
         {
             page.Header("Controller");
-            Gamepad pad = Gamepad.current;
-            page.Label(pad != null ? "Connected: " + pad.displayName : "No controller found. Plug one in (Xbox, PlayStation or any Windows controller) and reopen this page.", 18)
-                .color = pad != null ? UiKit.Purple : UiKit.DimText;
+            // Every connected controller counts (they are all read together, see Pressed), so all are listed.
+            var names = new List<string>();
+            for (int i = 0; i < Gamepad.all.Count; i++)
+                if (Gamepad.all[i] != null) names.Add(Gamepad.all[i].displayName);
+            page.Label(names.Count > 0 ? "Connected: " + string.Join(", ", names) : "No controller found. Plug one in (Xbox, PlayStation or any Windows controller) and reopen this page.", 18)
+                .color = names.Count > 0 ? UiKit.Purple : UiKit.DimText;
             page.Toggle("Controller support", new Func<bool>(GetEnabled), new Action<bool>(SetEnabled));
             page.Choice("Menu control style", StyleLabels, new Func<int>(GetStyle), new Action<int>(SetStyle));
             page.Slider("Cursor speed (left stick, Mouse style)", new Func<double>(GetSpeed), new Action<double>(SetSpeed), 0.3, 3.0, "0.0");
