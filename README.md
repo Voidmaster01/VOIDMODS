@@ -87,6 +87,11 @@ release `.dll`. Voidmaster01 checks every mod by hand (public source code makes 
 `registry/mods.json`. The Mod Menu installs only the exact approved file, checked by its SHA-256 fingerprint, so each new
 version needs a new submission. How the list works: [registry/README.md](registry/README.md).
 
+## Beta testers
+
+Want to try the next versions early? The test builds and how to install them are in [beta/](beta/README.md)
+(on the `modconfigs-1.1-modmenu` branch). Bug reports are very welcome.
+
 ## Repo layout
 
 ```

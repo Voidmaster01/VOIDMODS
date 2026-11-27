@@ -23,3 +23,6 @@ Thumbs.db
 
 # Local test tools (test driver, screenshot/click helpers, sound recorder): this PC only, never uploaded.
 tools/local-test/
+
+# Exception: the beta test builds on the test branch ARE uploaded, so testers can download them (see beta/README.md).
+!beta/*.dll
