@@ -30,6 +30,7 @@
 //   GameContext.cs: which role / minigame is being played, so key binds can differ per role
 //   EscapeKey.cs: Esc / Start goes back (closes a panel, puts the monitor down) before opening Settings
 //   ModPanel.cs: a ready-made panel other mods can open (the Mod Menu's MODS panel)
+//   Sounds.cs: the built-in "Sounds" page, one volume slider for every sound in the game
 
 using MelonLoader;
 
@@ -52,6 +53,10 @@ namespace ModConfigs
             KeyBinds.Load();
             ConfigHub.Register(KeyBinds.PageName, "built in", new System.Action<ConfigPage>(KeyBinds.BuildPage), true, KeyBinds.Category);
             ConfigHub.SetReset(KeyBinds.PageName, new System.Action(KeyBinds.ResetAll));
+            // Built-in page 2: Sounds, one volume slider per sound (Sounds.cs).
+            Sounds.Load();
+            ConfigHub.Register(Sounds.PageName, "built in", new System.Action<ConfigPage>(Sounds.BuildPage), true);
+            ConfigHub.SetReset(Sounds.PageName, new System.Action(Sounds.ResetAll));
         }
 
         // Every frame: lets MenuRow finish tidying the menu once Unity has laid it out (see MenuRow.Tick), and
@@ -67,6 +72,7 @@ namespace ModConfigs
             Controller.Tick(); // controller: cursor, click, scroll, Esc/Tab, and "PRESS A BUTTON..."
             DangerZone.Tick(); // the DANGER ZONE button's countdown
             EscapeKey.Tick();  // Esc / Start: close a panel or put the monitor down instead of opening Settings
+            Sounds.Tick();     // per-sound volumes: finds the game's sounds, rewrites changed ones, hides Music / SFX sliders
         }
 
         // When the game closes: save config-file changes that are still waiting, so nothing is lost.
