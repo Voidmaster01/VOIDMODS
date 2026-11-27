@@ -204,6 +204,8 @@ namespace ModConfigs
             AddRow(cat, s, Key.F, "Send it to the selected node", "None").OnPress = new Action(Controller.ClickAtCursor);
 
             cameraNumbers = cat.CreateEntry("Cam_NumberKeys", true, "Number keys pick cameras", null, true);
+            layoutMode = cat.CreateEntry("Key_LayoutMode", "Auto", "Keyboard layout (Auto = letters as printed on the keyboard, Positions = US places)", null, true);
+            RefreshLayout();
             Controller.Load(cat); // the controller's general settings live in the same category (Controller.cs)
             GameContext.Changed += Rebuild; // "+=" subscribes: Rebuild runs every time the role or minigame changes
             Rebuild();
@@ -280,13 +282,74 @@ namespace ModConfigs
 
         // The keyboard key chosen in a row. Enum.TryParse reads a name like "UpArrow" back into Key.UpArrow; a broken
         // name falls back to the game key itself.
+        // A key still at its default follows the "Keyboard layout" setting (see LayoutKey); a key the player chose by
+        // hand is used exactly as chosen.
         internal static Key Chosen(Bind b)
         {
             Key chosen;
             if (!Enum.TryParse(b.KeyEntry.Value, out chosen) || chosen == Key.None)
                 chosen = b.GameKey;
+            if (chosen == b.GameKey)
+                return LayoutKey(chosen);
             return chosen;
         }
+
+        // ================= keyboard layouts =================
+        // The game listens to key POSITIONS named after the US keyboard: its "A" (Security's left door) is the key in
+        // A's place, which a French AZERTY keyboard labels Q. So the game's own TIPS ("A: close left door") are wrong
+        // on such keyboards. Setting "Keyboard layout" (Voidmaster01: automatic, with a dropdown to switch it off):
+        //   Automatic: every default letter key moves to the key that has THAT LETTER printed on it on the player's
+        //              keyboard (read from Windows' current layout), so A means the key labelled A, like the TIPS say.
+        //              Layouts without Latin letters (Russian, Greek...) have no key labelled A, so keys stay in place.
+        //   Positions: the game's own way (US places), for players used to it.
+        // byLetter: letter position -> the key labelled with that letter right now. Rebuilt when Windows' layout
+        // changes (Keyboard.keyboardLayout, checked once a second in Tick).
+
+        private static MelonPreferences_Entry<string> layoutMode;
+        private static readonly Dictionary<Key, Key> byLetter = new Dictionary<Key, Key>();
+        private static string layoutName;  // the layout byLetter was built for
+        private static float nextLayoutCheck;
+
+        private static bool AutoLayout { get { return layoutMode == null || layoutMode.Value != "Positions"; } }
+
+        private static Key LayoutKey(Key k)
+        {
+            Key mapped;
+            if (AutoLayout && byLetter.TryGetValue(k, out mapped))
+                return mapped;
+            return k;
+        }
+
+        // Reads which key carries which letter (A..Z) on the current layout. True when something changed.
+        private static bool RefreshLayout()
+        {
+            Keyboard kb = Keyboard.current;
+            if (kb == null)
+                return false;
+            string name = kb.keyboardLayout ?? "";
+            if (name == layoutName)
+                return false;
+            layoutName = name;
+            byLetter.Clear();
+            // Key.A .. Key.Z follow each other in Unity's Key list, so (Key)((int)Key.A + n) is the n-th letter position.
+            for (int n = 0; n < 26; n++)
+            {
+                Key position = (Key)((int)Key.A + n);
+                string label;
+                try { label = (kb[position].displayName ?? "").Trim().ToUpperInvariant(); } catch { continue; }
+                if (label.Length != 1 || label[0] < 'A' || label[0] > 'Z')
+                    continue;
+                Key letter = (Key)((int)Key.A + (label[0] - 'A')); // the US position that is named after this letter
+                if (letter != position && !byLetter.ContainsKey(letter))
+                    byLetter[letter] = position;
+            }
+            MelonLogger.Msg("[ModConfigs] Keyboard layout: " + (name.Length > 0 ? name : "unknown") + " (" + byLetter.Count + " letters sit elsewhere than on a US keyboard).");
+            return true;
+        }
+
+        private static readonly string[] LayoutModes = { "Auto", "Positions" };
+        private static int GetLayoutMode() { return AutoLayout ? 0 : 1; }
+        private static void SetLayoutMode(int i) { layoutMode.Value = LayoutModes[Math.Max(0, Math.Min(1, i))]; Save(); ConfigHub.Refresh(); }
 
         // Works out what applies now: the role's section for the monitor's state (down / up), then the minigame
         // section on top (same key = minigame wins).
@@ -356,6 +419,7 @@ namespace ModConfigs
                     b.PadEntry.Value = b.DefaultPad;
                 }
             cameraNumbers.Value = true;
+            layoutMode.Value = "Auto";
             Controller.ResetAll(); // controller on/off, cursor speed and menu style back to their defaults too
             Save();
         }
@@ -406,6 +470,16 @@ namespace ModConfigs
             Keyboard kb = Keyboard.current;
             if (kb == null)
                 return;
+            // Once a second: did Windows switch keyboard layout (for example Alt+Shift)? Then follow it.
+            if (Time.unscaledTime >= nextLayoutCheck)
+            {
+                nextLayoutCheck = Time.unscaledTime + 1f;
+                if (RefreshLayout())
+                {
+                    Rebuild();
+                    ConfigHub.Refresh();
+                }
+            }
             if (actions.Count > 0)
             {
                 Bypass = true;
@@ -465,6 +539,9 @@ namespace ModConfigs
             page.Label("Each role has its own keys; they switch by themselves when your night starts. Click a key, then press the new "
                 + "key (Esc cancels). Click a controller button, then press the button on your controller (Start cancels, View / Share "
                 + "clears it). Purple = changed. RESET TO DEFAULTS puts everything back.", 18).color = UiKit.DimText;
+            string detected = string.IsNullOrEmpty(layoutName) ? "unknown" : layoutName;
+            page.Choice("Keyboard layout", new[] { "Automatic: letters as printed on my keyboard (" + detected + ")", "Key positions (US QWERTY places, like the game)" },
+                new Func<int>(GetLayoutMode), new Action<int>(SetLayoutMode));
             page.Toggle("Number keys 1-9 / number pad pick cameras (while the Cameras tab is open)", new Func<bool>(GetCameraNumbers), new Action<bool>(SetCameraNumbers));
             foreach (KeySection s in sections)
                 BuildSection(page, s);
@@ -506,7 +583,8 @@ namespace ModConfigs
             {
                 Key chosen = Chosen(b);
                 klabel.text = Pretty(chosen);
-                klabel.color = chosen == b.GameKey ? UiKit.TextColor : UiKit.Purple; // purple = changed from default
+                // purple = changed by hand (a default key moved by the keyboard-layout setting is still a default)
+                klabel.color = b.KeyEntry.Value == b.GameKey.ToString() ? UiKit.TextColor : UiKit.Purple;
             }
 
             // Controller button (Controller.cs waits for the button).
