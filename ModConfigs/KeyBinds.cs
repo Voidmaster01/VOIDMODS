@@ -564,7 +564,13 @@ namespace ModConfigs
                 KeyControl c = kb != null && k != Key.None ? kb[k] : null;
                 string label = c != null ? c.displayName : null;
                 if (!string.IsNullOrEmpty(label) && label.Trim().Length == 1)
-                    return label.Trim().ToUpperInvariant();
+                {
+                    char ch = label.Trim().ToUpperInvariant()[0];
+                    // The game's pixel font may not have every alphabet (Cyrillic, Greek, Arabic...): a letter it can't
+                    // draw would show as an empty box, so then the US name of that key position is shown instead.
+                    if (ch < 128 || UiKit.Font == null || UiKit.Font.HasCharacter(ch, true))
+                        return ch.ToString();
+                }
             }
             catch { } // a Key value with no key on this keyboard: fall back to the US name
             return UsName(k);
