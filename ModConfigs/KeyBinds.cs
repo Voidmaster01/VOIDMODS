@@ -24,6 +24,12 @@
 //   Outside a night, and while dead or spectating, nothing is changed. Saved in UserData\MelonPreferences.cfg,
 //   category KeyBinds, as Key_<section>_<key> and Pad_<section>_<key> (the monitor-down sections kept their old ids).
 //
+// KEYBOARD LAYOUTS (AZERTY, QWERTZ, Dvorak...)
+//   The game reads keys by their POSITION (Unity's Key values are positions named after the US keyboard), and so does
+//   ModConfigs, so remapping works the same on every layout. The page shows every key with the label it has on the
+//   player's own keyboard (see Pretty): on AZERTY the Security "close left door" key shows as Q, because that is the
+//   key the game really listens to there. (The defaults in this file are written as US positions: Key.A, Key.W...)
+//
 // HOW THE KEYBOARD REMAPPING WORKS
 //   The game reads these keys with Unity's new Input System, by asking a key object "isPressed?" (also
 //   "wasPressedThisFrame?" and "wasReleasedThisFrame?"). Those questions are property reads on ButtonControl
@@ -544,9 +550,29 @@ namespace ModConfigs
             }
         }
 
-        // Key names for people: "UpArrow" -> "Up Arrow", "Digit1" -> "1", "Numpad5" -> "Numpad 5".
-        // The loop puts a space before each capital letter or first digit that follows a small letter.
+        // Key names for people, IN THE PLAYER'S OWN KEYBOARD LAYOUT (Voidmaster01: "keyboard layouts!").
+        // Unity's Key values (and the game, and our remapping) mean a key's POSITION, named after the US (QWERTY)
+        // keyboard: Key.A is the key where A sits on QWERTY. On a French AZERTY keyboard that key is labelled Q, on
+        // German QWERTZ Key.Y is labelled Z, and so on. KeyControl.displayName is the label of that key on the layout
+        // Windows is using right now, so a single-character label (a letter, digit or symbol) is shown as the player
+        // sees it on their keyboard. Named keys (Space, Left Arrow...) keep the names below.
         internal static string Pretty(Key k)
+        {
+            try
+            {
+                Keyboard kb = Keyboard.current;
+                KeyControl c = kb != null && k != Key.None ? kb[k] : null;
+                string label = c != null ? c.displayName : null;
+                if (!string.IsNullOrEmpty(label) && label.Trim().Length == 1)
+                    return label.Trim().ToUpperInvariant();
+            }
+            catch { } // a Key value with no key on this keyboard: fall back to the US name
+            return UsName(k);
+        }
+
+        // The US-layout name from the Key value: "UpArrow" -> "Up Arrow", "Digit1" -> "1", "Numpad5" -> "Numpad 5".
+        // The loop puts a space before each capital letter or first digit that follows a small letter.
+        private static string UsName(Key k)
         {
             string s = k.ToString();
             if (s.StartsWith("Digit"))
