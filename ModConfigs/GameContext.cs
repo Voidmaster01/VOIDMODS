@@ -160,6 +160,16 @@ namespace ModConfigs
             return purpleUi;
         }
 
+        // The PurpleGuy game object (energy, Wordle, and since 0.9.71 which screen is up). There is one per match, so
+        // it is looked up in the scene and remembered; "== null" is also true once Unity has destroyed it after a match.
+        private static PurpleGuy purpleGuy;
+        private static PurpleGuy PurpleGuyObject()
+        {
+            if (purpleGuy == null)
+                purpleGuy = UnityEngine.Object.FindObjectOfType<PurpleGuy>();
+            return purpleGuy;
+        }
+
         public static void FlipPurpleLeft() { FlipPurple(0); }
         public static void FlipPurpleRight() { FlipPurple(1); }
 
@@ -444,8 +454,13 @@ namespace ModConfigs
         {
             if (Role == PlayerRoles.PurpleGuy && PurpleUi() != null)
             {
-                if (purpleUi.isMonitorUp) { purpleUi.MonitorFlip0(); return true; }
-                if (purpleUi.isMonitor1Up) { purpleUi.MonitorFlip1(); return true; }
+                // Since game 0.9.71 the "which screen is up" flags live on the PurpleGuy object (isMonitor0Up = left,
+                // isMonitor1Up = right), shared over the network so spectators see it. Before, they were on PurpleGuyUI.
+                PurpleGuy pg = PurpleGuyObject();
+                if (pg == null)
+                    return false;
+                if (pg.isMonitor0Up.Value) { purpleUi.MonitorFlip0(); return true; }
+                if (pg.isMonitor1Up.Value) { purpleUi.MonitorFlip1(); return true; }
                 return false;
             }
             if (Role == PlayerRoles.None || computer == null || computer.isMonitorAlwaysUp)
