@@ -6,7 +6,7 @@ Mods for **FNAF Online Multiplayer** by Brian_mpz, made by Voidmaster01, for [Me
 
 | Mod | What it does |
 |---|---|
-| **ModConfigs** | Adds a **MOD CONFIGS** row to the home screen menu: one in-game place for the settings of all your mods. Other mods can add their own page, every mod's MelonPreferences settings get an automatic page, and mods that keep their settings in their own file (.ini .cfg .json .toml .yaml .xml ...) get one too. Search box and RESET TO DEFAULTS. Built-in **Key Binds** page: change the game's keys, play with an **Xbox / PlayStation / other controller**, and a **DANGER ZONE** to clear your save on purpose (typed phrase, countdown, automatic backup). It also turns off the game's easy-to-trigger *Hold D to clear Save Data*. |
+| **ModConfigs** | Adds a **MOD CONFIGS** row to the home screen menu: one in-game place for the settings of all your mods. Other mods can add their own page, every mod's MelonPreferences settings get an automatic page, and mods that keep their settings in their own file (.ini .cfg .json .toml .yaml .xml ...) get one too. Search box and RESET TO DEFAULTS. Built-in **Key Binds** page: change the game's keys, play with an **Xbox / PlayStation / other controller**, and a **DANGER ZONE** to clear your save on purpose (typed phrase, countdown, automatic backup). Built-in **Sounds** page: every sound in the game has its own volume slider (0-200 %), and **sound packs** replace any sound with your own WAV files (make a pack, export the original sounds, share a pack as a zipped folder). It also turns off the game's easy-to-trigger *Hold D to clear Save Data*. |
 | **Voidcons** | Your own **player icon**, shown in the backer-icon spot on the character select screen. Pick any picture in the game, move and crop it into a round HD icon, and other Voidcons players see it. Needs ModConfigs. |
 | **ModMenu** | A **MODS** button on the home screen (under WHAT'S NEW): switch mods on and off, and **install and update approved mods** in game. Needs ModConfigs 1.1.0. |
 
@@ -24,7 +24,7 @@ Download from the **[Releases](../../releases)** page. **FULL** (every mod) is a
 1. Install [MelonLoader](https://melonwiki.xyz) 0.7 into the game folder and start the game once.
 2. Put the `.dll` files you picked in the game's `Mods` folder.
 3. Start the game. With ModConfigs, **MOD CONFIGS** is in the home screen menu (key binds and controller: its
-   **Key Binds** page). With ModMenu, the **MODS** button sits under WHAT'S NEW.
+   **Key Binds** page; sound volumes and sound packs: its **Sounds** page). With ModMenu, the **MODS** button sits under WHAT'S NEW.
 
 **Already using ModMenu?** It installs and updates the other mods for you: **MODS -> GET MODS**.
 
@@ -91,7 +91,7 @@ version needs a new submission. How the list works: [registry/README.md](registr
 
 ```
 ModConfigs/   the MOD CONFIGS hub (ConfigHub API, UiKit look, PngReader, menu row, panel, config files, key binds,
-              controller, danger zone + save backup, ModPanel)
+              controller, danger zone + save backup, ModPanel, Sounds page + sound packs)
 Voidcons/     player icons (networking, move-and-crop page, image compression, file picker)
 ModMenu/      the MODS button: installed mods on/off, GET MODS browser + updater
 registry/     mods.json, the approved mod list the Mod Menu reads (tools\add-mod.ps1 adds mods)

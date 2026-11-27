@@ -8,6 +8,7 @@
 //   - It hides the game's own Music and SFX sliders on the Settings page and sets them to full, because the
 //     per-sound sliders replace them (Master and Voice Chat stay). A toggle on the page brings them back.
 //   - Saved in UserData\ModConfigs\sound-volumes.txt, one "sound name=percent" per line (only changed sounds).
+//   - The page also holds the "Sound packs" part (SoundPacks.cs): replace any sound with your own WAV file.
 //
 // HOW IT WORKS
 //   The game plays all its sounds from one list in its sound manager (GameAudioManager: 132 effects + 4 music
@@ -180,8 +181,8 @@ namespace ModConfigs
         };
 
         // The role sections in page order, with the title shown for each.
-        private static readonly string[] SectionIds = { "Everyone", "Security","PartsAndService", "Backstage", "Janitor", "PurpleGuy" };
-        private static string SectionTitle(string id)
+        internal static readonly string[] SectionIds = { "Everyone", "Security","PartsAndService", "Backstage", "Janitor", "PurpleGuy" };
+        internal static string SectionTitle(string id)
         {
             switch (id)
             {
@@ -194,7 +195,7 @@ namespace ModConfigs
         }
 
         // One sound on the page.
-        private sealed class Entry
+        internal sealed class Entry
         {
             public string Clip;     // the sound file's name (the key)
             public string Section;  // role section id
@@ -203,18 +204,28 @@ namespace ModConfigs
         }
 
         // What ModConfigs knows about one sound file in memory.
-        private sealed class ClipState
+        internal sealed class ClipState
         {
             public AudioClip Clip;
             public IntPtr Native;                  // the game object's address: changes if the game loads the sound again
             public Il2CppStructArray<float> Original; // untouched samples, kept from the first change on
             public float Applied = 1f;             // the volume the samples are at now (1 = as the game made it)
+            public readonly List<Sound> Owners = new List<Sound>(); // the sound manager's entries that play this sound
+            // Set while a sound pack replaces this sound (SoundPacks.cs): the pack's own sound, its untouched samples
+            // (read from the WAV file), the volume they're at now, and which file it came from.
+            public AudioClip PackClip;
+            public Il2CppStructArray<float> PackSamples;
+            public float PackApplied = -1f;        // -1 = not written yet
+            public string PackFile;
         }
 
         // StringComparer.OrdinalIgnoreCase: "Foxy Run1" and "foxy run1" count as the same name.
-        private static readonly Dictionary<string, Entry> entries = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
+        internal static readonly Dictionary<string, Entry> entries = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, float> volumes = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase); // only changed ones
-        private static readonly Dictionary<string, ClipState> clips = new Dictionary<string, ClipState>(StringComparer.OrdinalIgnoreCase);
+        internal static readonly Dictionary<string, ClipState> clips = new Dictionary<string, ClipState>(StringComparer.OrdinalIgnoreCase);
+
+        // Asks for every sound to be brought to its chosen volume on the next frame (used after a pack swap).
+        internal static void RequestApply() { applyAt = 0f; }
         private static string file;
         private static float nextScan;       // when to look at the sound manager again
         private static float applyAt = -1f;  // when to rewrite changed sounds (a moment after the last slider move)
@@ -297,6 +308,7 @@ namespace ModConfigs
                 try { FindSounds(); } catch (Exception e) { MelonLogger.Warning("[ModConfigs] Sounds: " + e.Message); }
                 try { GameSliders(); } catch (Exception e) { MelonLogger.Warning("[ModConfigs] Settings sliders: " + e.Message); }
             }
+            SoundPacks.Tick(); // swaps in pack sounds when something changed, runs the WAV export a little each frame
             if (applyAt >= 0f && now >= applyAt)
             {
                 applyAt = -1f;
@@ -335,10 +347,22 @@ namespace ModConfigs
                 AudioClip c = s.audioClip;
                 string name = c.name;
                 ClipState st;
-                if (!clips.TryGetValue(name, out st) || st.Native != c.Pointer)
+                // A pack's sound has the same name as the one it replaces, so it counts as "already known".
+                bool ours = clips.TryGetValue(name, out st) && (st.Native == c.Pointer || (st.PackClip != null && st.PackClip.Pointer == c.Pointer));
+                if (!ours)
                 {
-                    clips[name] = new ClipState { Clip = c, Native = c.Pointer };
+                    st = new ClipState { Clip = c, Native = c.Pointer };
+                    clips[name] = st;
                     changed = true;
+                    SoundPacks.NeedRefresh = true; // a fresh sound from the game: a pack may need to replace it again
+                }
+                bool owned = false;
+                foreach (Sound o in st.Owners)
+                    if (o.Pointer == s.Pointer) { owned = true; break; }
+                if (!owned)
+                {
+                    st.Owners.Add(s);
+                    SoundPacks.NeedRefresh = true; // a new entry may still point at the game's sound
                 }
                 if (!entries.ContainsKey(name))
                     entries[name] = new Entry { Clip = name, Section = "Everyone", Group = "New / unknown", Label = name };
@@ -362,8 +386,15 @@ namespace ModConfigs
         }
 
         // Rewrites one sound's samples at the given volume (see HOW IT WORKS at the top).
-        private static unsafe void Apply(ClipState st, float volume)
+        private static void Apply(ClipState st, float volume)
         {
+            // A sound pack replaces this sound: its samples came from the WAV file, so they are always at hand.
+            if (st.PackClip != null)
+            {
+                if (Mathf.Abs(st.PackApplied - volume) >= 0.001f && WriteScaled(st.PackSamples, st.PackClip, volume))
+                    st.PackApplied = volume;
+                return;
+            }
             if (st.Clip == null || Mathf.Abs(st.Applied - volume) < 0.001f)
                 return;
             int count = st.Clip.samples * st.Clip.channels; // samples = per channel, so stereo has twice as many numbers
@@ -389,11 +420,22 @@ namespace ModConfigs
                     return;
                 }
             }
+            if (WriteScaled(st.Original, st.Clip, volume))
+                MelonLogger.Msg("[ModConfigs] Sound '" + st.Clip.name + "' is now at " + Math.Round(volume * 100f) + " %.");
+            st.Applied = volume;
+            if (Mathf.Abs(volume - 1f) < 0.001f)
+                st.Original = null; // back to the original: no need to keep a second copy in memory
+        }
+
+        // Writes "source samples x volume" into a sound. Used for the game's sounds and for sound-pack sounds.
+        internal static unsafe bool WriteScaled(Il2CppStructArray<float> source, AudioClip clip, float volume)
+        {
+            int count = source.Length;
             var scaled = new Il2CppStructArray<float>(count);
             // The numbers of a game array sit right after a small header of 4 pointer-sized fields (type, lock,
             // bounds, length). A pointer (float*) walks them directly, which is far faster than going through the
             // array's indexer for millions of samples. "unsafe" is C#'s word for code that uses pointers.
-            float* src = (float*)IntPtr.Add(st.Original.Pointer, 4 * IntPtr.Size);
+            float* src = (float*)IntPtr.Add(source.Pointer, 4 * IntPtr.Size);
             float* dst = (float*)IntPtr.Add(scaled.Pointer, 4 * IntPtr.Size);
             for (int i = 0; i < count; i++)
             {
@@ -401,13 +443,10 @@ namespace ModConfigs
                 dst[i] = v > 1f ? 1f : (v < -1f ? -1f : v); // held at the limit instead of crackling
             }
             // SetData is in the game's own code (the game uses it), so the normal call is safe, unlike GetData.
-            if (!st.Clip.SetData(scaled, 0))
-                MelonLogger.Warning("[ModConfigs] Couldn't change the volume of '" + st.Clip.name + "'.");
-            else
-                MelonLogger.Msg("[ModConfigs] Sound '" + st.Clip.name + "' is now at " + Math.Round(volume * 100f) + " %.");
-            st.Applied = volume;
-            if (Mathf.Abs(volume - 1f) < 0.001f)
-                st.Original = null; // back to the original: no need to keep a second copy in memory
+            if (clip.SetData(scaled, 0))
+                return true;
+            MelonLogger.Warning("[ModConfigs] Couldn't change the volume of '" + clip.name + "'.");
+            return false;
         }
 
         // ---- reading a sound's samples ----
@@ -433,7 +472,7 @@ namespace ModConfigs
         private delegate bool GetDataFn(IntPtr clip, ref SpanBlock data, int samplesOffset);
         private static GetDataFn getData;
 
-        private static bool ReadSamples(AudioClip clip, Il2CppStructArray<float> into, int count)
+        internal static bool ReadSamples(AudioClip clip, Il2CppStructArray<float> into, int count)
         {
             if (getData == null)
                 getData = Il2CppInterop.Runtime.IL2CPP.ResolveICall<GetDataFn>("UnityEngine.AudioClip::GetData_Injected");
@@ -487,6 +526,7 @@ namespace ModConfigs
                 + "Changes apply right away, also to sounds that are playing. The game's Master and Voice Chat sliders (Settings) "
                 + "still work on top of these. RESET TO DEFAULTS puts every sound back to 100 %.", 18).color = UiKit.DimText;
             page.Toggle("Hide the game's Music and SFX sliders (Settings) and keep them at full", new Func<bool>(GetHide), new Action<bool>(SetHide));
+            SoundPacks.BuildSection(page); // the "Sound packs" part: packs on/off and the pack tools
             if (clips.Count == 0)
                 page.Label("(The sound list appears once the game's sound manager has loaded; open this page again in a moment.)", 18).color = UiKit.DimText;
 
@@ -512,7 +552,12 @@ namespace ModConfigs
                         if (e.Group == g)
                         {
                             var row = new Row(e.Clip);
-                            page.Slider(e.Label, new Func<double>(row.Get), new Action<double>(row.Set), 0, 200, "0'%'", true);
+                            // A sound a pack replaces says which pack, in small purple text after its name.
+                            string label = e.Label;
+                            ClipState cs;
+                            if (clips.TryGetValue(e.Clip, out cs) && cs.PackFile != null)
+                                label += " <size=15><color=#b98cff>(" + SoundPacks.PackNameOf(cs.PackFile) + ")</color></size>";
+                            page.Slider(label, new Func<double>(row.Get), new Action<double>(row.Set), 0, 200, "0'%'", true);
                         }
                 }
             }

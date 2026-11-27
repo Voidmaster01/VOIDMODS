@@ -31,6 +31,7 @@
 //   EscapeKey.cs: Esc / Start goes back (closes a panel, puts the monitor down) before opening Settings
 //   ModPanel.cs: a ready-made panel other mods can open (the Mod Menu's MODS panel)
 //   Sounds.cs: the built-in "Sounds" page, one volume slider for every sound in the game
+//   SoundPacks.cs: sound packs (folders of WAV files that replace game sounds), on the Sounds page
 
 using MelonLoader;
 

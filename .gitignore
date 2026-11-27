@@ -20,3 +20,6 @@ Thumbs.db
 *.bak
 .vs/
 .vscode/
+
+# Local test tools (test driver, screenshot/click helpers, sound recorder): this PC only, never uploaded.
+tools/local-test/
