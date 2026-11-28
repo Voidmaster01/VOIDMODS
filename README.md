@@ -7,7 +7,7 @@ Mods for **FNAF Online Multiplayer** by Brian_mpz, made by Voidmaster01, for [Me
 | Mod | What it does |
 |---|---|
 | **ModConfigs** | Adds a **MOD CONFIGS** row to the home screen menu: one in-game place for the settings of all your mods. Other mods can add their own page, every mod's MelonPreferences settings get an automatic page, and mods that keep their settings in their own file (.ini .cfg .json .toml .yaml .xml ...) get one too. Search box and RESET TO DEFAULTS. Built-in **Key Binds** page: change the game's keys, play with an **Xbox / PlayStation / other controller**, and a **DANGER ZONE** to clear your save on purpose (typed phrase, countdown, automatic backup). Built-in **Sounds** page: every sound in the game has its own volume slider (0-200 %), and **sound packs** replace any sound with your own WAV files (make a pack, export the original sounds, share a pack as a zipped folder). It also turns off the game's easy-to-trigger *Hold D to clear Save Data*. |
-| **Voidcons** | Your own **player icon**, shown in the backer-icon spot on the character select screen. Pick any picture in the game, move and crop it into a round HD icon, and other Voidcons players see it. Needs ModConfigs. |
+| **Voidcons** | Your own **player icon**, shown in the backer-icon spot on the character select screen. Pick any picture in the game, move and crop it into a small round icon, and other Voidcons players see it. Icons are kept tiny (about 10 KB) and only sent once per player, to keep network traffic low. Needs ModConfigs. |
 | **ModMenu** | A **MODS** button on the home screen (under WHAT'S NEW): switch mods on and off, and **install and update approved mods** in game. Needs ModConfigs 1.1.0. |
 
 ## Installing (players): pick your mods

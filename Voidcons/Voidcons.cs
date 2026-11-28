@@ -1,4 +1,4 @@
-// Voidcons.cs - source code of the Voidcons mod (v1.0.0) for FNAF Online Multiplayer.
+// Voidcons.cs - source code of the Voidcons mod (v1.1.0) for FNAF Online Multiplayer.
 //
 // WHAT IT DOES
 //   Lets every player show their OWN picture as their player icon on the character select screen, in the
@@ -11,7 +11,7 @@
 // HOW TO BUILD AND RUN
 //   Build: from the repo folder, pwsh -NoProfile -File build.ps1 -Mod Voidcons (after ModConfigs; build-all.ps1 does both).
 //   Use:   everything is done in the game: home screen -> MOD CONFIGS -> Voidcons. There you choose a picture
-//          (PNG, JPG, WebP, GIF, BMP, HEIC, AVIF...), move and crop it, and Voidcons makes it a round 256 x 256 PNG. You can also
+//          (PNG, JPG, WebP, GIF, BMP, HEIC, AVIF...), move and crop it, and Voidcons makes it a small round 128 x 128 PNG. You can also
 //          remove it, choose whether a backer icon is replaced (BackerOverride, off by default), forget
 //          remembered backers, and reload.
 //   Needs the ModConfigs mod (the MOD CONFIGS hub). MelonLoader says so if it's missing.
@@ -30,11 +30,16 @@
 //   The game already has a backer-icon system: LobbyUI.backerIcons maps a player NAME to a picture, and
 //   CharacterSelectPlayer.HandleIcon shows that picture next to the player. Voidcons reuses that spot:
 //     1. Your game reads UserData\Voidcons\icon.png when the mod loads.
-//     2. When you are in a lobby, it sends "HELLO" and then your icon to the host, using Unity Netcode's
-//        "named messages" (the game's own network connection, under the message name "Voidcons.v1").
+//     2. When you are in a lobby, it sends "HELLO" and your icon's FINGERPRINT (16 bytes) to the host, using
+//        Unity Netcode's "named messages" (the game's own network connection, message name "Voidcons.v3").
+//        The picture itself (a few KB) only travels when the host asks for it because it has no copy yet.
 //     3. Netcode tells the host which connection (client number) sent it, so nobody can send an icon for
-//        someone else. The host passes "client number N has this icon" to every Voidcons player. A client
+//        someone else. The host passes "client number N has the icon with this fingerprint" to every Voidcons
+//        player; each one asks for the picture only if it hasn't kept a copy from an earlier lobby. A client
 //        number only exists for that one lobby session, so it says nothing about who you are outside it.
+//   Keeping network traffic low matters: the game's developer pays for the data sent between players. So icons
+//   are small (128 x 128, at most 256 colors: about 5-10 KB), and each picture crosses the network as rarely as
+//   possible (kept copies in "Kept icons", at most one send per picture per player per lobby).
 //     4. Each Voidcons game shows the picture in the backer-icon spot after the game's own code ran.
 //   Games without Voidcons never get these messages: the host only sends them to players who said HELLO.
 //   Two extra parts live in their own classes at the bottom:
@@ -58,7 +63,7 @@ using Unity.Netcode;
 using UnityEngine;
 
 // Labels for MelonLoader: the main class, name, version, author, and the game this mod is for.
-[assembly: MelonInfo(typeof(Voidcons.VoidconsMod), "Voidcons", "1.0.0", "Voidmaster01")]
+[assembly: MelonInfo(typeof(Voidcons.VoidconsMod), "Voidcons", "1.1.0", "Voidmaster01")]
 [assembly: MelonGame("Brian_mpz", "FNAF Online Multiplayer")]
 // Voidcons needs the ModConfigs mod: MelonLoader loads it first and warns the player if it's missing.
 [assembly: MelonAdditionalDependencies("ModConfigs")]
@@ -70,11 +75,14 @@ namespace Voidcons
     public class VoidconsMod : MelonMod
     {
         // ---- Settings that never change ----
-        // v2 = HD icons sent in pieces. A new name means older Voidcons builds simply don't hear these messages.
-        private const string MessageName = "Voidcons.v2";      // the name our network messages travel under
-        private const byte ProtocolVersion = 2;                // bumped if the message layout ever changes
-        internal const int MaxPngBytes = 192 * 1024;           // biggest icon file accepted (192 KB; HD round icons are ~30-100 KB)
-        internal const int MaxIconSize = 256;                  // biggest width/height in pixels (HD icons are 256 x 256)
+        // v3 = small 128 x 128 icons, announced by fingerprint first and only sent to players who don't have them
+        // yet (to keep network traffic, which the game's developer pays for, as low as possible).
+        // A new name means older Voidcons builds simply don't hear these messages.
+        private const string MessageName = "Voidcons.v3";      // the name our network messages travel under
+        private const byte ProtocolVersion = 3;                // bumped if the message layout ever changes
+        internal const int MaxPngBytes = 48 * 1024;            // biggest icon file accepted (48 KB; icons are ~5-10 KB)
+        internal const int MaxIconSize = ImageTools.IconSize;  // biggest width/height in pixels (128)
+        private const int IdBytes = 16;                        // length of an icon's fingerprint (see IconId)
         // The game's network layer only takes about 6 KB per message by default, so icons travel in 4000-byte
         // pieces and are put back together on the other side ("chunking").
         private const int ChunkBytes = 4000;
@@ -87,6 +95,12 @@ namespace Voidcons
         private const byte MsgMyIcon = 2;  // client -> host: [flags][piece header][PNG piece] "here is (a piece of) my icon"
         private const byte MsgIcon = 3;    // host -> client: [flags][client number: 8 bytes][piece header][PNG piece]
         private const byte MsgRemove = 4;  // host -> client: [client number: 8 bytes] "this client left, drop their icon"
+        // Fingerprint messages (v3): a fingerprint is 16 bytes, an icon is thousands, so players first say WHICH icon
+        // it is and the picture itself only travels to someone who hasn't kept a copy from an earlier lobby.
+        private const byte MsgMyIconId = 5;  // client -> host: [flags][fingerprint] "my icon is this one"
+        private const byte MsgSendYours = 6; // host -> client: "I don't have that icon yet, please send it"
+        private const byte MsgIconId = 7;    // host -> client: [flags][client number: 8 bytes][fingerprint] "player N has this icon"
+        private const byte MsgWantIcon = 8;  // client -> host: [client number: 8 bytes] "I don't have player N's icon, send it"
 
         // Bits in the "flags" byte. A flag is one yes/no switch stored in one bit of a number; "&" tests it.
         internal const byte FlagOverrideBacker = 1; // the sender chose to show this picture instead of their backer icon
@@ -108,8 +122,14 @@ namespace Voidcons
         private sealed class ClientState
         {
             public bool Modded;        // said HELLO, so it understands our messages
-            public byte[] Png;         // the icon it uploaded, or null
+            public byte[] Png;         // the icon it uploaded (or the host's kept copy of it), or null
+            public byte[] Id;          // that icon's fingerprint
+            public byte[] WaitingFor;  // a fingerprint it announced that the host doesn't have yet (upload asked for)
             public byte Flags;         // the flags it sent with the icon
+            // Players whose icon pictures this client has already been sent this session. A HashSet is a list that
+            // holds each value once and answers "is X in it?" quickly. Used so nobody can ask for the same picture
+            // again and again (each repeat would cost network traffic).
+            public readonly HashSet<ulong> PicturesSent = new HashSet<ulong>();
             public bool Shared;        // its icon has been shown and passed on
             public bool SeenInList;    // it has appeared in the game's player list at least once
             public float LastUpload = -100f; // when it last sent an icon (to ignore spam)
@@ -117,7 +137,8 @@ namespace Voidcons
         private static readonly Dictionary<ulong, ClientState> Clients = new Dictionary<ulong, ClientState>();
 
         private static bool sessionActive;   // our message handler is registered for the current connection
-        private static bool helloSent;       // (client) HELLO and icon were sent to the host
+        private static bool helloSent;       // (client) HELLO and my icon's fingerprint were sent to the host
+        private static bool ownIconSent;     // (client) the host asked for my picture and got it (only once per lobby)
         private static float nextPoll;       // time of the next slow check (twice per second is plenty)
         private static bool loggedMessageError;
 
@@ -149,7 +170,7 @@ namespace Voidcons
             LoggerInstance.Msg(LoadOwnIcon());
             // Our page in MOD CONFIGS. true = it's a VOIDMOD (logo in the list); "Voidcons" = our MelonPreferences
             // category, which this page already shows, so the hub doesn't add an automatic page for it too.
-            ConfigHub.Register("Voidcons", "1.0.0", new Action<ConfigPage>(VoidconsPage.Build), true, "Voidcons");
+            ConfigHub.Register("Voidcons", "1.1.0", new Action<ConfigPage>(VoidconsPage.Build), true, "Voidcons");
         }
 
         // (Re)reads icon.png and checks it. Returns a sentence about the result, for the log and the panel.
@@ -159,12 +180,40 @@ namespace Voidcons
             if (!File.Exists(IconPath))
                 return "No icon yet. Choose one in MOD CONFIGS -> Voidcons on the home screen.";
             byte[] bytes = File.ReadAllBytes(IconPath);
+            bytes = ShrinkOldIcon(bytes);
             // Check the file before using it, so a broken or huge picture is reported now, not in a lobby.
             string error = CheckPng(bytes, out int width, out int height);
             if (error != null)
                 return $"icon.png can't be used: {error}. Choose a new picture on the home screen.";
             ownPng = bytes;
             return $"Your icon is loaded ({width}x{height}, {bytes.Length / 1024.0:0.0} KB).";
+        }
+
+        // Icons made by Voidcons 1.0 are 256 x 256 full color (30-100 KB). This turns such an icon into today's small
+        // 128 x 128 one, once: the original is kept as "icon.before-128px.png" and icon.png is replaced.
+        // Returns the bytes to use (unchanged when the icon is already small enough or can't be read).
+        private static byte[] ShrinkOldIcon(byte[] png)
+        {
+            try
+            {
+                byte[] rgba = PngReader.Decode(png, 4096, out int w, out int h, out _);
+                if (rgba == null || (w <= ImageTools.IconSize && h <= ImageTools.IconSize && png.Length <= MaxPngBytes))
+                    return png;
+                byte[] square = ImageTools.FitSquare(rgba, w, h, ImageTools.IconSize);
+                byte[] small = ImageTools.EncodePng(square, ImageTools.IconSize, ImageTools.IconSize);
+                string original = Path.Combine(Folder, "icon.before-128px.png");
+                if (!File.Exists(original))
+                    File.Copy(IconPath, original);
+                File.WriteAllBytes(IconPath, small);
+                Instance.LoggerInstance.Msg($"Made your icon smaller for the network: {w}x{h} {png.Length / 1024.0:0.0} KB -> " +
+                    $"{ImageTools.IconSize}x{ImageTools.IconSize} {small.Length / 1024.0:0.0} KB (the original is kept as icon.before-128px.png).");
+                return small;
+            }
+            catch (Exception e)
+            {
+                Instance.LoggerInstance.Warning("Couldn't make the old icon smaller: " + e.Message);
+                return png;
+            }
         }
 
         // Writes a short how-to text into the folder the first time, so players know what goes there.
@@ -177,12 +226,14 @@ namespace Voidcons
                 "Voidcons - your own player icon\r\n\r\n" +
                 "Everything is done inside the game: home screen -> MOD CONFIGS -> Voidcons.\r\n" +
                 "There you can choose a picture (PNG, JPG, WebP, GIF, BMP, HEIC, AVIF..., any size), move and\r\n" +
-                "crop it (Voidcons makes it a round 256 x 256 icon), remove it, choose whether a backer icon is replaced,\r\n" +
+                "crop it (Voidcons makes it a small round 128 x 128 icon), remove it, choose whether a backer icon is replaced,\r\n" +
                 "forget remembered backers, and reload Voidcons.\r\n\r\n" +
                 "Other players see your icon on the character select screen when they have Voidcons too,\r\n" +
                 "and the lobby's host has Voidcons.\r\n\r\n" +
                 "Files here: icon.png (your icon), icon.previous.png (the one before), backer_guard.dat\r\n" +
-                "(BackerGuard's scrambled fingerprints; no names or player IDs).\r\n");
+                "(BackerGuard's scrambled fingerprints; no names or player IDs), and the folder \"Kept icons\":\r\n" +
+                "copies of icons from other players, so the same icon isn't downloaded again in every lobby\r\n" +
+                "(at most 300; the oldest are removed by themselves).\r\n");
         }
 
         // ================= actions for the in-game panel =================
@@ -286,11 +337,13 @@ namespace Voidcons
             nm.CustomMessagingManager.RegisterNamedMessageHandler(MessageName, new Action<ulong, FastBufferReader>(OnMessage));
             sessionActive = true;
             helloSent = false;
+            ownIconSent = false;
             Clients.Clear();
             if (nm.IsServer && ownPng != null)
             {
                 ClientState me = GetClient(NetworkManager.ServerClientId);
                 me.Png = ownPng;
+                me.Id = IconId(ownPng);
                 me.Flags = BackerOverride.Flags();
             }
             LoggerInstance.Msg(nm.IsServer ? "Hosting: Voidcons shares icons between Voidcons players." : "Joined: telling the host about Voidcons.");
@@ -326,8 +379,9 @@ namespace Voidcons
             if (mm == null || mm.playerDataList == null || mm.playerDataList.Count == 0)
                 return;
             Send(NetworkManager.ServerClientId, new byte[] { MsgHello, ProtocolVersion });
+            // Only the fingerprint first: the host asks for the picture (MsgSendYours) if it hasn't kept a copy.
             if (ownPng != null)
-                SendPieces(NetworkManager.ServerClientId, new byte[] { MsgMyIcon, BackerOverride.Flags() }, ownPng);
+                Send(NetworkManager.ServerClientId, Join(new byte[] { MsgMyIconId, BackerOverride.Flags() }, IconId(ownPng)));
             helloSent = true;
         }
 
@@ -382,14 +436,21 @@ namespace Voidcons
             }
         }
 
-        // Show one player's icon on the host and send it to every Voidcons player.
+        // Show one player's icon on the host and tell every Voidcons player its fingerprint. Each of them answers
+        // MsgWantIcon only if it hasn't kept a copy, and only then is the picture itself sent.
         private static void ShareIcon(ulong clientId, ClientState c)
         {
             c.Shared = true;
             ApplyIcon(clientId, c.Png, c.Flags);
             foreach (KeyValuePair<ulong, ClientState> pair in Clients)
                 if (pair.Value.Modded && pair.Key != NetworkManager.ServerClientId)
-                    SendIcon(pair.Key, clientId, c.Png, c.Flags);
+                    SendIconId(pair.Key, clientId, c);
+        }
+
+        // "Player <owner> has the icon with this fingerprint": [kind][flags][client number: 8 bytes][fingerprint].
+        private static void SendIconId(ulong target, ulong owner, ClientState c)
+        {
+            Send(target, Join(Join(new byte[] { MsgIconId, c.Flags }, BitConverter.GetBytes(owner)), c.Id));
         }
 
         // Sends a message to every player that said HELLO (never to the host itself, which has it already).
@@ -433,22 +494,57 @@ namespace Voidcons
                         if (!nm.IsServer)
                             return;
                         GetClient(sender).Modded = true;
-                        // Catch the newcomer up: send every icon that is already known.
+                        // Catch the newcomer up: the fingerprint of every icon that is already known.
                         foreach (KeyValuePair<ulong, ClientState> pair in Clients)
                             if (pair.Value.Shared && pair.Value.Png != null)
-                                SendIcon(sender, pair.Key, pair.Value.Png, pair.Value.Flags);
+                                SendIconId(sender, pair.Key, pair.Value);
+                        break;
+
+                    case MsgMyIconId:
+                    {
+                        // [kind][flags][fingerprint]: a player tells us which icon it has.
+                        if (!nm.IsServer || data.Length != 2 + IdBytes)
+                            return;
+                        ClientState c = GetClient(sender);
+                        c.Modded = true;
+                        byte[] id = Slice(data, 2);
+                        byte[] kept = LoadKept(id);
+                        if (kept != null)
+                        {
+                            // We kept this picture from an earlier lobby: no upload needed at all.
+                            UseUploadedIcon(sender, c, kept, data[1]);
+                        }
+                        else if (c.WaitingFor == null)
+                        {
+                            // Not known yet: ask for the picture, once.
+                            c.WaitingFor = id;
+                            c.Flags = data[1];
+                            Send(sender, new byte[] { MsgSendYours });
+                        }
+                        break;
+                    }
+
+                    case MsgSendYours:
+                        // The host asks for my picture (it has no copy yet). Only the host may ask, and only once.
+                        if (nm.IsServer || sender != NetworkManager.ServerClientId || ownPng == null || ownIconSent)
+                            return;
+                        ownIconSent = true;
+                        SendPieces(NetworkManager.ServerClientId, new byte[] { MsgMyIcon, BackerOverride.Flags() }, ownPng);
                         break;
 
                     case MsgMyIcon:
                     {
                         // [kind][flags][piece header][piece]: collect pieces until the whole PNG is here.
+                        // Only accepted after we asked for it (MsgSendYours), so nobody can push pictures unasked.
                         if (!nm.IsServer || data.Length < 9)
                             return;
                         ClientState c = GetClient(sender);
-                        c.Modded = true;
+                        if (c.WaitingFor == null)
+                            return;
                         byte[] png = Assemble(sender, data, 2);
                         if (png == null)
                             return; // not complete yet (or a broken piece)
+                        c.WaitingFor = null;
                         if (Time.unscaledTime - c.LastUpload < 5f)
                             return; // more than one upload in 5 seconds: ignore (protects against spam)
                         c.LastUpload = Time.unscaledTime;
@@ -458,11 +554,39 @@ namespace Voidcons
                             Instance.LoggerInstance.Warning($"Ignored an icon from client {sender}: {error}");
                             return;
                         }
-                        c.Png = png;
-                        c.Flags = data[1];
-                        if (c.Shared)
-                            ShareIcon(sender, c); // already in the game (a new picture): share it right away
-                        break;                    // otherwise HostPoll shares it once the game has added them
+                        Keep(png);
+                        UseUploadedIcon(sender, c, png, data[1]);
+                        break;
+                    }
+
+                    case MsgIconId:
+                    {
+                        // [kind][flags][client number: 8 bytes][fingerprint]: the host says which icon a player has.
+                        // Use our kept copy if we have it; otherwise ask the host for the picture.
+                        if (nm.IsServer || sender != NetworkManager.ServerClientId || data.Length != 10 + IdBytes)
+                            return;
+                        ulong owner = BitConverter.ToUInt64(data, 2);
+                        byte[] kept = LoadKept(Slice(data, 10));
+                        if (kept != null)
+                            ApplyIcon(owner, kept, data[1]);
+                        else
+                            Send(NetworkManager.ServerClientId, Join(new byte[] { MsgWantIcon }, BitConverter.GetBytes(owner)));
+                        break;
+                    }
+
+                    case MsgWantIcon:
+                    {
+                        // [kind][client number: 8 bytes]: a player asks for one icon picture. Each picture is sent to
+                        // each player at most once per lobby, however often they ask.
+                        if (!nm.IsServer || data.Length != 9)
+                            return;
+                        ulong owner = BitConverter.ToUInt64(data, 1);
+                        ClientState asker = GetClient(sender);
+                        if (!asker.Modded || !Clients.TryGetValue(owner, out ClientState o) || !o.Shared || o.Png == null)
+                            return;
+                        if (asker.PicturesSent.Add(owner)) // Add returns false when it was already in the set
+                            SendIcon(sender, owner, o.Png, o.Flags);
+                        break;
                     }
 
                     case MsgIcon:
@@ -474,8 +598,10 @@ namespace Voidcons
                             return;
                         ulong owner = BitConverter.ToUInt64(data, 2);
                         byte[] png = Assemble(owner, data, 10);
-                        if (png != null)
-                            ApplyIcon(owner, png, data[1]);
+                        if (png == null || CheckPng(png, out _, out _) != null)
+                            return;
+                        Keep(png); // so the next lobby with this player costs no picture traffic
+                        ApplyIcon(owner, png, data[1]);
                         break;
                     }
 
@@ -602,6 +728,97 @@ namespace Voidcons
             for (int i = 0; i < length; i++)
                 result[i] = buffer[i];
             return result;
+        }
+
+        // (Host) A player's icon is known now, uploaded or from our kept copies: store it, and share it right away
+        // if the game already lists that player (otherwise HostPoll shares it once the game has added them).
+        private static void UseUploadedIcon(ulong sender, ClientState c, byte[] png, byte flags)
+        {
+            c.Png = png;
+            c.Id = IconId(png);
+            c.Flags = flags;
+            foreach (ClientState other in Clients.Values)
+                other.PicturesSent.Remove(sender); // a new picture may be sent once more to everyone
+            if (c.Shared)
+                ShareIcon(sender, c);
+        }
+
+        // ================= kept copies of icons =================
+        // Every icon that arrives is kept in UserData\Voidcons\Kept icons\<fingerprint>.png. In the next lobby with
+        // the same player only the 16-byte fingerprint has to travel, not the picture (a few thousand bytes).
+
+        private const int MaxKept = 300; // keep at most this many; the ones not used for the longest go first
+
+        private static string KeptFolder
+        {
+            get { return Path.Combine(Folder, "Kept icons"); }
+        }
+
+        // An icon's fingerprint: the first 16 bytes of its SHA-256 hash. SHA-256 is a one-way scramble that turns
+        // any data into 32 bytes; two different pictures practically never get the same result, so it can stand
+        // for the picture. 16 bytes are plenty for that and keep the messages short.
+        private static byte[] IconId(byte[] png)
+        {
+            byte[] full = System.Security.Cryptography.SHA256.HashData(png);
+            var id = new byte[IdBytes];
+            Buffer.BlockCopy(full, 0, id, 0, IdBytes);
+            return id;
+        }
+
+        // The file name for a fingerprint: its bytes written as hexadecimal (0-9, a-f), e.g. "3fa1...".
+        private static string KeptPath(byte[] id)
+        {
+            return Path.Combine(KeptFolder, Convert.ToHexString(id).ToLowerInvariant() + ".png");
+        }
+
+        // Saves a received icon (already checked with CheckPng) unless we have it, then trims the folder.
+        private static void Keep(byte[] png)
+        {
+            try
+            {
+                Directory.CreateDirectory(KeptFolder);
+                string file = KeptPath(IconId(png));
+                if (File.Exists(file))
+                    return;
+                File.WriteAllBytes(file, png);
+                FileInfo[] all = new DirectoryInfo(KeptFolder).GetFiles("*.png");
+                if (all.Length <= MaxKept)
+                    return;
+                // Oldest "last used" time first (LoadKept touches a file each time it is used).
+                Array.Sort(all, CompareLastWrite);
+                for (int i = 0; i < all.Length - MaxKept; i++)
+                    all[i].Delete();
+            }
+            catch (Exception e)
+            {
+                LogOnce($"Couldn't keep an icon: {e.Message}");
+            }
+        }
+
+        private static int CompareLastWrite(FileInfo a, FileInfo b)
+        {
+            return a.LastWriteTimeUtc.CompareTo(b.LastWriteTimeUtc);
+        }
+
+        // Returns the kept icon with this fingerprint, or null. The file is checked again (it must still match its
+        // fingerprint and be a valid icon), so a damaged or swapped file is never shown.
+        private static byte[] LoadKept(byte[] id)
+        {
+            try
+            {
+                string file = KeptPath(id);
+                if (!File.Exists(file))
+                    return null;
+                byte[] png = File.ReadAllBytes(file);
+                if (!IconId(png).AsSpan().SequenceEqual(id) || CheckPng(png, out _, out _) != null)
+                    return null;
+                File.SetLastWriteTimeUtc(file, DateTime.UtcNow); // mark it as recently used
+                return png;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         // Small byte helpers: Join glues two arrays together, Slice copies everything from "start" on.

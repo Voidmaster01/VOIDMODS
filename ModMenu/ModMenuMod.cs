@@ -1,4 +1,4 @@
-// ModMenuMod.cs - ModMenu (v0.2.0), a VOIDMOD for FNAF Online Multiplayer: switching mods on and off, and
+// ModMenuMod.cs - ModMenu (v0.2.1), a VOIDMOD for FNAF Online Multiplayer: switching mods on and off, and
 // finding, installing and updating approved mods.
 //
 // WHAT IT DOES
@@ -6,7 +6,7 @@
 //   MODS panel (a ModPanel from ModConfigs) with:
 //     - INSTALLED MODS: an ON/OFF switch for each mod (InstalledMods.cs: Mods <-> Mods\Disabled),
 //     - GET MODS: approved mods from the VOIDMODS list on GitHub, with INSTALL / UPDATE buttons (Browser.cs,
-//       Registry.cs, Installer.cs). When the game starts it checks for updates in the background (a setting,
+//       ModList.cs, WebFetch.cs, Installer.cs). When the game starts it checks for updates in the background (a setting,
 //       "Check for updates when the game starts", on the automatic ModMenu page in MOD CONFIGS),
 //     - a shortcut to ModConfigs' Key Binds page (key binds and the DANGER ZONE live in ModConfigs, so they work
 //       even without the Mod Menu; Voidmaster01's decision).
@@ -25,7 +25,7 @@ using System;
 using MelonLoader;
 using ModConfigs;
 
-[assembly: MelonInfo(typeof(ModMenu.ModMenuMod), "ModMenu", "0.2.0", "Voidmaster01")]
+[assembly: MelonInfo(typeof(ModMenu.ModMenuMod), "ModMenu", "0.2.1", "Voidmaster01")]
 [assembly: MelonGame("Brian_mpz", "FNAF Online Multiplayer")]
 // MelonLoader loads ModConfigs first, and tells the player if it is missing.
 [assembly: MelonAdditionalDependencies("ModConfigs")]
@@ -51,9 +51,11 @@ namespace ModMenu
             LoggerInstance.Msg("Mod Menu is ready (the MODS button on the home screen, under WHAT'S NEW).");
         }
 
-        // Every frame: shows results of background downloads (see Browser.Tick).
+        // Every frame: runs downloads through the game's web code (WebFetch.Tick) and shows results of background
+        // work (Browser.Tick).
         public override void OnUpdate()
         {
+            WebFetch.Tick();
             Browser.Tick();
         }
 

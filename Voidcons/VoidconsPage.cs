@@ -5,7 +5,7 @@
 //   backers, and Reload Voidcons.
 //   Move-and-crop view (after choosing a picture): the picture with a round frame, like the circle crop tool Brian
 //   uses for the game's backer icons. Drag the picture to move it, use the mouse wheel or the Zoom buttons to zoom,
-//   and watch the live result on the right. "Use this" makes a round 256 x 256 (HD) icon.png; "Cancel" goes back
+//   and watch the live result on the right. "Use this" makes a small round 128 x 128 icon.png; "Cancel" goes back
 //   without changing anything.
 //
 // HOW TO RUN / WHAT IT NEEDS
@@ -44,7 +44,7 @@ namespace Voidcons
         private static int srcW, srcH;
         private static Sprite srcSprite;     // the chosen picture as a sprite, shown on the stage
         private static float zoom = 1f, offX, offY;
-        private static byte[] cropped;       // the current 64 x 64 result (RGBA)
+        private static byte[] cropped;       // the current 128 x 128 result (RGBA)
         private static Sprite previewSprite;
         private static RectTransform pictureRT;
         private static Image previewImage;
@@ -134,7 +134,7 @@ namespace Voidcons
             RectTransform pic = UiKit.Element(frame, "Result", Mid, Mid, Mid, Vector2.zero, new Vector2(128, 128));
             previewImage = UiKit.Picture(pic, null);
             RectTransform caption = UiKit.Element(area, "Caption", TopLeft, TopLeft, TopLeft, new Vector2(x + 165, 0), new Vector2(200, 150));
-            UiKit.Text(caption, "Your icon\n256 x 256 (HD)", 20, UiKit.DimText, TextAlignmentOptions.MidlineLeft);
+            UiKit.Text(caption, "Your icon\n128 x 128", 20, UiKit.DimText, TextAlignmentOptions.MidlineLeft);
             SideButton(area, x, 170, "Zoom +", new Action(ZoomIn));
             SideButton(area, x + 190, 170, "Zoom -", new Action(ZoomOut));
             SideButton(area, x, 230, "Whole picture", new Action(FitWhole), 370);
@@ -241,7 +241,7 @@ namespace Voidcons
         }
 
         // Works out which part of the picture is inside the square (see the math in the header) and makes the
-        // 64 x 64 result from it with ImageTools.Resample.
+        // 128 x 128 result from it with ImageTools.Resample.
         private static void UpdatePreview()
         {
             if (src == null || previewImage == null)

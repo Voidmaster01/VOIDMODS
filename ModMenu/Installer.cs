@@ -36,7 +36,7 @@ namespace ModMenu
     internal static class Installer
     {
         private static string Mods { get { return MelonEnvironment.ModsDirectory; } }
-        public static string BackupsDir { get { return Path.Combine(Registry.Folder, "Backups"); } }
+        public static string BackupsDir { get { return Path.Combine(ModList.Folder, "Backups"); } }
 
         // MAIN THREAD (it asks MelonLoader which mods are loaded).
         public static Found Where(ListedMod m)
@@ -85,7 +85,7 @@ namespace ModMenu
         public static void Install(ListedMod m, string target, bool test)
         {
             // 1. Download and check the fingerprint BEFORE touching the Mods folder.
-            byte[] data = Registry.Fetch(m.Url, test);
+            byte[] data = ModList.Fetch(m.Url, test);
             string got = Sha256Of(data);
             if (got != m.Sha256)
                 throw new InvalidOperationException("the downloaded " + m.File + " is NOT the approved file (fingerprint " +

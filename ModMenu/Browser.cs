@@ -1,7 +1,7 @@
 // Browser.cs - part of ModMenu: the GET MODS section of the MODS panel (browse, install, update).
 //
 // WHAT IT DOES
-//   Shows every approved mod from the list (Registry.cs) with what it is, and one button that fits:
+//   Shows every approved mod from the list (ModList.cs) with what it is, and one button that fits:
 //     INSTALL                      not installed yet (mods it requires are installed with it)
 //     UPDATE TO x                  the list has a newer version than the one that is loaded
 //     (no button)                  up to date / you have a newer version / switched off / installed, restart
@@ -62,8 +62,8 @@ namespace ModMenu
         private static void CheckJob()
         {
             string error;
-            bool test = Registry.UsingTestList;
-            List<ListedMod> got = Registry.Download(out error);
+            bool test = ModList.UsingTestList;
+            List<ListedMod> got = ModList.Download(out error);
             lock (Sync)
             {
                 // A failed check keeps the last list (GitHub may just be slow), unless that list came from the other
@@ -107,7 +107,7 @@ namespace ModMenu
                     }
                     catch (Exception e)
                     {
-                        // AggregateException wraps errors from async downloads; GetBaseException finds the real one.
+                        // GetBaseException finds the original error if it was wrapped inside another one.
                         error = Mods[i].Name + ": " + e.GetBaseException().Message;
                         MelonLogger.Warning("[ModMenu] Install failed: " + error);
                         break;

@@ -165,10 +165,13 @@ namespace ModMenu
             page.Button("SHOW THE MODS FOLDER", new Action(OpenFolder));
         }
 
+        // Opens the Mods folder in Explorer through Unity (OpenURL with a file:/// link), the way ModConfigs does it.
+        // Earlier versions started explorer.exe directly; antivirus programs distrust mods that start other programs.
+        // new Uri(...).AbsoluteUri turns "G:\Games\Mods\" into "file:///G:/Games/Mods/" (spaces become %20).
         private static void OpenFolder()
         {
-            try { System.Diagnostics.Process.Start("explorer.exe", "\"" + Mods + "\""); }
-            catch (Exception e) { MelonLogger.Warning("[ModMenu] Can't open Explorer: " + e.Message); }
+            try { UnityEngine.Application.OpenURL(new Uri(Mods + Path.DirectorySeparatorChar).AbsoluteUri); }
+            catch (Exception e) { MelonLogger.Warning("[ModMenu] Can't open the Mods folder: " + e.Message); }
         }
 
         // Connects one switch to one file (instead of a lambda). Set moves the file, then the page is rebuilt so it

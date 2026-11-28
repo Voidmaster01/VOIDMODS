@@ -1,4 +1,4 @@
-// Registry.cs - part of ModMenu: the list of APPROVED mods that GET MODS shows.
+// ModList.cs - part of ModMenu: the list of APPROVED mods that GET MODS shows.
 //
 // WHAT IT DOES
 //   Downloads registry/mods.json from the VOIDMODS repo on GitHub and turns it into a list of ListedMod objects.
@@ -24,7 +24,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MelonLoader;
@@ -47,7 +46,8 @@ namespace ModMenu
         public string[] Requires = new string[0]; // ids of mods it needs
     }
 
-    internal static class Registry
+    // (Called "Registry" in earlier versions; renamed so it is never mistaken for the Windows registry.)
+    internal static class ModList
     {
         public const string ListUrl = "https://raw.githubusercontent.com/Voidmaster01/VOIDMODS/main/registry/mods.json";
 
@@ -55,26 +55,13 @@ namespace ModMenu
         public static string TestListPath { get { return Path.Combine(Folder, "registry-test.json"); } }
         public static bool UsingTestList { get { return System.IO.File.Exists(TestListPath); } }
 
-        // One HttpClient for the whole game (.NET's advice: making a new one per download wastes connections).
-        // The User-Agent is just the program's name: GitHub asks for one, and it says nothing about the player.
-        private static readonly HttpClient Http = MakeClient();
-
-        private static HttpClient MakeClient()
-        {
-            var c = new HttpClient();
-            c.Timeout = TimeSpan.FromSeconds(60);
-            c.MaxResponseContentBufferSize = 64L * 1024 * 1024; // no mod is anywhere near 64 MB; stops a runaway download
-            c.DefaultRequestHeaders.UserAgent.ParseAdd("VOIDMODS-ModMenu/0.2");
-            return c;
-        }
-
         // Downloads one file into memory. https:// always; file:// only for a test list.
-        // GetByteArrayAsync is "async" (it would normally let the program do other things while waiting);
-        // .GetAwaiter().GetResult() simply waits for it here, which is fine because this runs on a background thread.
+        // The download itself is done by the game's own web code (WebFetch.cs explains why); this runs on a
+        // background thread and simply waits for the answer.
         public static byte[] Fetch(string url, bool test)
         {
             if (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                return Http.GetByteArrayAsync(url).GetAwaiter().GetResult();
+                return WebFetch.Get(url);
             if (test && url.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
                 return System.IO.File.ReadAllBytes(new Uri(url).LocalPath);
             throw new InvalidOperationException("Only https:// download links are allowed: " + url);
@@ -90,17 +77,16 @@ namespace ModMenu
                 byte[] bytes = test ? System.IO.File.ReadAllBytes(TestListPath) : Fetch(ListUrl, false);
                 return Parse(bytes, test, out error);
             }
-            catch (HttpRequestException e)
+            catch (WebFetchException e)
             {
-                // StatusCode is set when GitHub answered with an error page (404 = the list isn't on GitHub yet).
-                error = e.StatusCode == System.Net.HttpStatusCode.NotFound
+                // StatusCode is GitHub's answer number (404 = the list isn't on GitHub yet; 0 = no answer at all).
+                error = e.StatusCode == 404
                     ? "The mod list isn't on GitHub yet (registry/mods.json, 404)."
                     : "Couldn't reach GitHub: " + e.Message;
             }
             catch (Exception e)
             {
-                // A TaskCanceledException here means the 60 second timeout ran out.
-                error = (e is System.Threading.Tasks.TaskCanceledException) ? "GitHub took too long to answer." : "Couldn't get the mod list: " + e.Message;
+                error = "Couldn't get the mod list: " + e.Message;
             }
             return null;
         }

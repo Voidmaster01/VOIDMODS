@@ -2,8 +2,8 @@
 //
 // WHAT IT DOES
 //   Reads a picture file (PNG, JPG, BMP, GIF, TIFF...), lets the move-and-crop editor pick any square part of it,
-//   shrinks that part to 64 x 64, and writes it as a small, optimized PNG file. That PNG is what Voidcons saves
-//   as icon.png and sends to other players.
+//   shrinks that part to 128 x 128, and writes it as a small, optimized PNG file (at most 256 colors). That PNG is
+//   what Voidcons saves as icon.png and sends to other players, so it is kept as small as possible.
 //
 // HOW TO RUN / WHAT IT NEEDS
 //   Compiled into Voidcons.dll by build.ps1. Needs Windows (it uses GDI+, Windows' built-in image library,
@@ -17,9 +17,10 @@
 //      transparent) and shrinks or grows it by AVERAGING: every new pixel is the average of all old pixels it
 //      covers. That keeps it smooth instead of jagged. Colors are weighted by their transparency ("premultiplied
 //      alpha"), so see-through pixels don't darken the edges. The crop editor and FitSquare both use it.
-//   3. EncodePng: writes the pixels as a PNG. Each row gets the PNG "filter" that makes it compress best,
-//      then zlib packs everything at its smallest setting. Pictures without transparency are stored without
-//      the alpha channel, which makes them a quarter smaller.
+//   3. EncodePng: writes the pixels as a PNG, trying two ways and keeping the smaller file:
+//      a palette PNG (the 256 colors that fit the picture best, each pixel one byte) and a full-color PNG (each row
+//      gets the PNG "filter" that compresses best; no alpha channel when nothing is see-through).
+//      zlib packs both at its smallest setting.
 
 using System;
 using System.IO;
@@ -31,9 +32,10 @@ namespace Voidcons
 {
     internal static class ImageTools
     {
-        // Every icon is made 256 x 256 and round, like the game's own backer icons (Brian makes those with a
-        // circle crop tool), in HD so they stay sharp on big screens.
-        public const int IconSize = 256;
+        // Every icon is made 128 x 128 and round, like the game's own backer icons (Brian makes those with a
+        // circle crop tool). 128 (not 256) because icons travel over the network to every player: a 128 x 128
+        // palette PNG is about 5-8 KB instead of 30-100 KB for a 256 x 256 full-color one (void's choice, 2026-11-28).
+        public const int IconSize = 128;
         private const long MaxInputBytes = 30L * 1024 * 1024; // refuse picture files over 30 MB
         private const int MaxInputSide = 10000;             // and pictures wider or taller than 10000 pixels
 
@@ -270,7 +272,7 @@ namespace Voidcons
         }
 
         // Shrinks a picture so neither side is bigger than maxSide (smaller pictures are returned unchanged).
-        // The crop editor works on this smaller copy: it's plenty for a 64 x 64 result and keeps memory low.
+        // The crop editor works on this smaller copy: it's plenty for a 128 x 128 result and keeps memory low.
         public static byte[] FitInside(byte[] rgba, ref int width, ref int height, int maxSide)
         {
             if (width <= maxSide && height <= maxSide)
@@ -285,8 +287,267 @@ namespace Voidcons
 
         // ================= 3. writing a small PNG =================
 
-        // Encodes RGBA pixels (top row first) as a PNG file. See PngReader.cs for how the format is built.
+        // Encodes RGBA pixels (top row first) as the SMALLEST PNG we can make, because every byte of an icon is
+        // sent over the network to other players (and the game's developer pays for that traffic).
+        // It makes two versions and keeps the smaller one:
+        //   - a palette PNG: at most 256 different colors, each pixel stored as one number (0-255) that points into
+        //     the color list. Photos lose a tiny bit of color detail; at icon size you can hardly see it, and the file
+        //     is about 5 to 6 times smaller.
+        //   - a full-color PNG (every pixel keeps its exact color). Only wins for very simple pictures.
         public static byte[] EncodePng(byte[] rgba, int width, int height)
+        {
+            byte[] palette = EncodePalettePng(rgba, width, height);
+            byte[] full = EncodeTrueColorPng(rgba, width, height);
+            return palette.Length <= full.Length ? palette : full;
+        }
+
+        // ---- palette PNG ("indexed color", PNG color type 3) ----
+        // Step 1 picks up to 256 colors that represent the picture well (Quantize, below).
+        // Step 2 replaces every pixel by the number of its closest palette color.
+        // Step 3 writes the PNG: PLTE = the colors (R,G,B), tRNS = their transparency (A), IDAT = the numbers.
+        private static byte[] EncodePalettePng(byte[] rgba, int width, int height)
+        {
+            uint[] palette = Quantize(rgba, 256);
+
+            // Colors with transparency go FIRST in the list: tRNS only has to list alphas up to the last see-through
+            // color (the rest count as fully opaque), so this keeps tRNS short. Array.Sort with a comparison method.
+            Array.Sort(palette, CompareByAlpha);
+
+            // Map every pixel to its closest palette color. Most pictures repeat colors a lot, so the answer for each
+            // exact color is remembered in a Dictionary (a lookup table: color -> palette number).
+            var lookup = new System.Collections.Generic.Dictionary<uint, byte>();
+            var raw = new MemoryStream();
+            for (int y = 0; y < height; y++)
+            {
+                raw.WriteByte(0); // filter 0 = "none": filters help photos, but not lists of palette numbers
+                for (int x = 0; x < width; x++)
+                {
+                    uint color = Pack(rgba, (y * width + x) * 4);
+                    if (!lookup.TryGetValue(color, out byte index))
+                    {
+                        index = Nearest(palette, color);
+                        lookup[color] = index;
+                    }
+                    raw.WriteByte(index);
+                }
+            }
+
+            var packed = new MemoryStream();
+            using (var zlib = new ZLibStream(packed, CompressionLevel.SmallestSize, true))
+                raw.WriteTo(zlib);
+
+            // PLTE: 3 bytes (R,G,B) per color. tRNS: 1 alpha byte per color, up to the last one that isn't opaque.
+            var plte = new byte[palette.Length * 3];
+            int lastSeeThrough = -1;
+            for (int i = 0; i < palette.Length; i++)
+            {
+                plte[i * 3] = (byte)(palette[i] >> 24);
+                plte[i * 3 + 1] = (byte)(palette[i] >> 16);
+                plte[i * 3 + 2] = (byte)(palette[i] >> 8);
+                if ((byte)palette[i] != 255)
+                    lastSeeThrough = i;
+            }
+            var trns = new byte[lastSeeThrough + 1];
+            for (int i = 0; i < trns.Length; i++)
+                trns[i] = (byte)palette[i];
+
+            var png = new MemoryStream();
+            png.Write(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }, 0, 8);
+            var header = new byte[13];
+            WriteUInt32(header, 0, (uint)width);
+            WriteUInt32(header, 4, (uint)height);
+            header[8] = 8; // 8 bits per palette number
+            header[9] = 3; // color type 3 = palette
+            WriteChunk(png, "IHDR", header);
+            WriteChunk(png, "PLTE", plte);
+            if (trns.Length > 0)
+                WriteChunk(png, "tRNS", trns);
+            WriteChunk(png, "IDAT", packed.ToArray());
+            WriteChunk(png, "IEND", Array.Empty<byte>());
+            return png.ToArray();
+        }
+
+        // One RGBA pixel packed into one 32-bit number: 0xRRGGBBAA. ">>" (shift right) and "(byte)" take parts back out.
+        // Fully transparent pixels all become 0, because their color is invisible anyway (fewer colors to store).
+        private static uint Pack(byte[] rgba, int i)
+        {
+            if (rgba[i + 3] == 0)
+                return 0;
+            return ((uint)rgba[i] << 24) | ((uint)rgba[i + 1] << 16) | ((uint)rgba[i + 2] << 8) | rgba[i + 3];
+        }
+
+        // Palette order: see-through colors first (keeps tRNS short), then dark to bright. With colors sorted by
+        // brightness, neighboring pixels usually get neighboring numbers, which zlib packs better.
+        private static int CompareByAlpha(uint a, uint b)
+        {
+            int byAlpha = ((byte)a).CompareTo((byte)b);
+            return byAlpha != 0 ? byAlpha : Brightness(a).CompareTo(Brightness(b));
+        }
+
+        // Rough brightness as the eye sees it (green counts most, blue least).
+        private static int Brightness(uint c)
+        {
+            return (int)((c >> 24) & 255) * 299 + (int)((c >> 16) & 255) * 587 + (int)((c >> 8) & 255) * 114;
+        }
+
+        // The palette number whose color is closest to "color" (smallest squared distance over R, G, B and A).
+        private static byte Nearest(uint[] palette, uint color)
+        {
+            int best = 0;
+            long bestDistance = long.MaxValue;
+            for (int i = 0; i < palette.Length; i++)
+            {
+                long d = 0;
+                for (int shift = 0; shift < 32; shift += 8)
+                {
+                    long diff = (int)((palette[i] >> shift) & 255) - (int)((color >> shift) & 255);
+                    d += diff * diff;
+                }
+                if (d < bestDistance)
+                {
+                    bestDistance = d;
+                    best = i;
+                }
+            }
+            return (byte)best;
+        }
+
+        // "Median cut": picks at most maxColors colors that represent the picture.
+        //   1. Count how often each exact color appears. If there are few enough, use them all (no loss at all).
+        //   2. Otherwise put all colors in one "box". Repeatedly take the box whose colors are spread the most
+        //      (the biggest range in red, green, blue or alpha, times how many pixels it holds) and cut it in two at
+        //      the middle pixel along that channel. Stop at maxColors boxes.
+        //   3. Each box becomes one palette color: the average of its colors, weighted by how often each appears.
+        private static uint[] Quantize(byte[] rgba, int maxColors)
+        {
+            var counts = new System.Collections.Generic.Dictionary<uint, int>();
+            for (int i = 0; i < rgba.Length; i += 4)
+            {
+                uint c = Pack(rgba, i);
+                counts.TryGetValue(c, out int n); // n is 0 when the color isn't there yet
+                counts[c] = n + 1;
+            }
+            if (counts.Count <= maxColors)
+                return new System.Collections.Generic.List<uint>(counts.Keys).ToArray();
+
+            var boxes = new System.Collections.Generic.List<ColorBox> { new ColorBox(counts) };
+            while (boxes.Count < maxColors)
+            {
+                // Find the box most worth cutting.
+                int pick = -1;
+                long bestScore = 0;
+                for (int i = 0; i < boxes.Count; i++)
+                {
+                    long score = (long)boxes[i].Range(out _) * boxes[i].Pixels;
+                    if (boxes[i].Colors.Count > 1 && score > bestScore)
+                    {
+                        bestScore = score;
+                        pick = i;
+                    }
+                }
+                if (pick < 0)
+                    break; // nothing left to cut
+                ColorBox other = boxes[pick].Split();
+                boxes.Add(other);
+            }
+            var result = new uint[boxes.Count];
+            for (int i = 0; i < boxes.Count; i++)
+                result[i] = boxes[i].Average();
+            return result;
+        }
+
+        // One box of the median cut: a list of (color, how many pixels have it).
+        private sealed class ColorBox
+        {
+            public System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<uint, int>> Colors;
+            public long Pixels;
+
+            public ColorBox(System.Collections.Generic.Dictionary<uint, int> counts)
+                : this(new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<uint, int>>(counts)) { }
+
+            private ColorBox(System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<uint, int>> colors)
+            {
+                Colors = colors;
+                foreach (var pair in colors)
+                    Pixels += pair.Value;
+            }
+
+            // The biggest spread (max - min) over the four channels, and which channel ("shift": 24 = R ... 0 = A).
+            public int Range(out int shift)
+            {
+                shift = 24;
+                int best = -1;
+                for (int s = 0; s < 32; s += 8)
+                {
+                    int min = 255, max = 0;
+                    foreach (var pair in Colors)
+                    {
+                        int v = (int)((pair.Key >> s) & 255);
+                        if (v < min) min = v;
+                        if (v > max) max = v;
+                    }
+                    if (max - min > best)
+                    {
+                        best = max - min;
+                        shift = s;
+                    }
+                }
+                return best;
+            }
+
+            // Sorts the colors along the most spread channel and moves the second half (by pixel count) into a new box.
+            public ColorBox Split()
+            {
+                Range(out int shift);
+                // Sort with a small comparer object that knows which channel to compare (VOIDMODS avoids lambdas
+                // that capture variables, see build.ps1).
+                Colors.Sort(new ChannelOrder(shift));
+                long half = Pixels / 2, seen = 0;
+                int cut = 1;
+                for (int i = 0; i < Colors.Count - 1; i++)
+                {
+                    seen += Colors[i].Value;
+                    cut = i + 1;
+                    if (seen >= half)
+                        break;
+                }
+                var second = new ColorBox(Colors.GetRange(cut, Colors.Count - cut));
+                Colors.RemoveRange(cut, Colors.Count - cut);
+                Pixels -= second.Pixels;
+                return second;
+            }
+
+            // The pixel-weighted average color of the box.
+            public uint Average()
+            {
+                double r = 0, g = 0, b = 0, a = 0;
+                foreach (var pair in Colors)
+                {
+                    r += ((pair.Key >> 24) & 255) * (double)pair.Value;
+                    g += ((pair.Key >> 16) & 255) * (double)pair.Value;
+                    b += ((pair.Key >> 8) & 255) * (double)pair.Value;
+                    a += (pair.Key & 255) * (double)pair.Value;
+                }
+                return ((uint)Math.Round(r / Pixels) << 24) | ((uint)Math.Round(g / Pixels) << 16)
+                     | ((uint)Math.Round(b / Pixels) << 8) | (uint)Math.Round(a / Pixels);
+            }
+        }
+
+        // Compares two (color, count) pairs by one channel. An IComparer is an object with a Compare method that
+        // List.Sort calls to ask "which of these two comes first?" (negative = a first, positive = b first).
+        private sealed class ChannelOrder : System.Collections.Generic.IComparer<System.Collections.Generic.KeyValuePair<uint, int>>
+        {
+            private readonly int shift;
+            public ChannelOrder(int shift) { this.shift = shift; }
+            public int Compare(System.Collections.Generic.KeyValuePair<uint, int> a, System.Collections.Generic.KeyValuePair<uint, int> b)
+            {
+                return ((a.Key >> shift) & 255).CompareTo((b.Key >> shift) & 255);
+            }
+        }
+
+        // ---- full-color PNG (PNG color type 2 or 6) ----
+        // Encodes RGBA pixels (top row first) as a PNG file. See PngReader.cs for how the format is built.
+        private static byte[] EncodeTrueColorPng(byte[] rgba, int width, int height)
         {
             // If every pixel is fully opaque, store only R,G,B (color type 2); otherwise R,G,B,A (color type 6).
             bool opaque = true;
