@@ -6,8 +6,8 @@
 //     1. Type the phrase DELETE MY SAVE DATA exactly (capitals and spaces count). Pasting is blocked: text that
 //        arrives faster than anyone can type (several letters in one frame) is removed again, see PasteGuard.
 //     2. When the phrase matches, the red button counts down 5 seconds before it unlocks.
-//     3. Clicking it first BACKS UP the save (GameSave.Backup: UserData\ModConfigs\SaveBackups\<time>),
-//        and only if that worked, runs the game's own clear (GameSave.ClearAll, home screen only).
+//     3. Clicking it runs the game's own clear (GameSave.ClearAll, home screen only). A FULL wipe with no backup
+//        and no undo (Voidmaster01, 2026-11-28): getting through steps 1 and 2 means the player really wants it.
 //   Changing the phrase back to anything else locks the button again.
 //   (Why a phrase and not the username: the save has no username in it, only a cached one, so there's nothing
 //   reliable to compare with.)
@@ -44,7 +44,7 @@ namespace ModConfigs
             RectTransform words = UiKit.Fill(inside, "Text");
             words.sizeDelta = new Vector2(-40, -16);
             UiKit.Text(words, "<b>Clear all save data</b>\nDeletes ALL your FNAF Online progress on this PC: stats, achievements, XP and settings. "
-                + "A backup is made first (UserData\\ModConfigs\\SaveBackups), but treat this as permanent.", 18, UiKit.TextColor, TextAlignmentOptions.MidlineLeft);
+                + "There is no backup and no undo.", 18, UiKit.TextColor, TextAlignmentOptions.MidlineLeft);
 
             if (!GameSave.CanClear)
             {
@@ -109,13 +109,9 @@ namespace ModConfigs
         {
             if (unlockAt < 0 || Time.unscaledTime < unlockAt)
                 return;
-            string folder, error;
-            if (!GameSave.Backup(out folder, out error))
-                status = "Nothing was cleared: " + error; // no backup -> no clearing, ever
-            else if (!GameSave.ClearAll(out error))
-                status = "Backed up to " + folder + ", but not cleared: " + error;
-            else
-                status = "Cleared. Your old save is backed up in " + folder;
+            string error;
+            // "? :" picks the first text when ClearAll worked, the second when it didn't.
+            status = GameSave.ClearAll(out error) ? "Cleared. All save data is gone." : "Nothing was cleared: " + error;
             typed = "";
             unlockAt = -1f;
             ConfigHub.Refresh();

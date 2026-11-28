@@ -11,7 +11,7 @@ updated as work goes on, so things may be unfinished or change. For the stable v
 
 | File | Version | What's new |
 |------|---------|------------|
-| `ModConfigs.dll` | 1.1.0 beta | **Sounds** page: every sound has its own volume slider (0-200 %), the game's Music / SFX sliders are replaced. **Sound packs**: replace any sound with your own WAV files. Per-role **key binds** for keyboard and controller, controller menu styles, keyboard layouts (QWERTZ, AZERTY...), Esc / Start goes back. |
+| `ModConfigs.dll` | 1.1.0 beta | DANGER ZONE is now a full wipe with no backup, and ModConfigs no longer touches the Windows registry. **Sounds** page: every sound has its own volume slider (0-200 %), the game's Music / SFX sliders are replaced. **Sound packs**: replace any sound with your own WAV files. Per-role **key binds** for keyboard and controller, controller menu styles, keyboard layouts (QWERTZ, AZERTY...), Esc / Start goes back. |
 | `ModMenu.dll` | 0.2.1 beta | The **MODS** button: installed mods on / off, GET MODS browser and updater. Needs ModConfigs. 0.2.1: downloads through the game's own web code and no longer starts Explorer itself (fewer antivirus false alarms). |
 | `Voidcons.dll` | 1.1.0 beta | Player icons. Needs ModConfigs. 1.1.0: icons are 128 x 128 with up to 256 colors (about 10 KB instead of up to 100 KB), and each player keeps copies of icons they have seen, so an icon only crosses the network once. Old 256 px icons are shrunk automatically (the original is kept). Talks only to other 1.1.0 players. |
 
@@ -32,7 +32,7 @@ In PowerShell: `Get-FileHash .\ModConfigs.dll`
 
 | File | SHA-256 |
 |------|---------|
-| ModConfigs.dll | `21B6C8C78F597073499F9250DB04FAE21E2278FB147102370A1BA43098B237E9` |
+| ModConfigs.dll | `BB77338833B44718F73C03588FA9AB204EF3CAE4713283E5F65F617E278933E6` |
 | ModMenu.dll | `34CD21A21F62F3E252B0D695BE286532C7417C3C5966EAB768BB53A46AA9E458` |
 | Voidcons.dll | `67130624CD542EF1312910866B4403804552583B1D33A77A7EB01CAEAC555969` |
 

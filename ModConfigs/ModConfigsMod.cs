@@ -25,7 +25,7 @@
 //   ModConfigsMod.cs (this file)   ConfigHub.cs: the API for other mods   UiKit.cs: VOIDMODS look + UI helpers
 //   PngReader.cs: reads PNG files  MenuRow.cs: the menu row               HubPanel.cs: the panel itself
 //   FileConfigs.cs: other mods' own config files              NoClearData.cs: turns off hold-D clear save data
-//   GameSave.cs: back up / clear the save on purpose          KeyBinds.cs + DangerZone.cs: the built-in Key Binds page
+//   GameSave.cs: clear the save on purpose (no backup)         KeyBinds.cs + DangerZone.cs: the built-in Key Binds page
 //   Controller.cs: Xbox / PlayStation / other controllers (also on the Key Binds page)
 //   GameContext.cs: which role / minigame is being played, so key binds can differ per role
 //   EscapeKey.cs: Esc / Start goes back (closes a panel, puts the monitor down) before opening Settings
